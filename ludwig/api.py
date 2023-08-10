@@ -24,11 +24,13 @@ import dataclasses
 import logging
 import os
 import sys
+import ray
 import tempfile
 import traceback
 from collections import OrderedDict
 from pprint import pformat
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, Union
+from ray.data.datasource import Datasource
 
 import numpy as np
 import pandas as pd
@@ -105,6 +107,8 @@ from ludwig.utils.print_utils import print_boxed
 from ludwig.utils.torch_utils import DEVICE
 from ludwig.utils.trainer_utils import get_training_report
 from ludwig.utils.types import DataFrame, TorchDevice
+from pyforesight.datasource import DBDataSource
+
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +181,6 @@ class PreprocessedDataset:
 @dataclass
 class TrainingResults:
     train_stats: TrainingStats
-    preprocessed_data: PreprocessedDataset
     output_directory: str
 
     def __iter__(self):
@@ -185,14 +188,62 @@ class TrainingResults:
 
         train_stats, training_set, output_dir = model.train(...)
         """
-        return iter((self.train_stats, self.preprocessed_data, self.output_directory))
+        return iter((self.train_stats, self.output_directory))
 
     def __getitem__(self, index):
         """Provides indexed getter ex.
 
         train_stats = model.train(...)[0]
         """
-        return (self.train_stats, self.preprocessed_data, self.output_directory)[index]
+        return (self.train_stats, self.output_directory)[index]
+
+
+class ProcessBatch:
+    def __init__(self, training_set, validation_set, test_set, training_set_metadata,
+                 data_format, experiment_name, model_name, model_resume_path, skip_save_training_description
+                 , skip_save_training_statistics, skip_save_model, skip_save_progress, skip_save_log,
+                 skip_save_processed_input, output_directory, random_seed,ludwig_model_obj):
+        self.training_set = training_set
+        self.validation_set = validation_set
+        self.test_set = test_set
+        self.training_set_metadata = training_set_metadata
+        self.data_format = data_format
+        self.experiment_name = experiment_name
+        self.model_name = model_name
+        self.model_resume_path = model_resume_path
+        self.skip_save_training_description = skip_save_training_description
+        self.skip_save_training_statistics = skip_save_training_statistics
+        self.skip_save_model = skip_save_model
+        self.skip_save_progress = skip_save_progress
+        self.skip_save_log = skip_save_log
+        self.skip_save_processed_input = skip_save_processed_input
+        self.output_directory = output_directory
+        self.random_seed = random_seed
+        self.ludwig_model_obj = ludwig_model_obj
+
+
+    def __call__(self, df: pd.DataFrame):
+        preprocessed_data = self.ludwig_model_obj.preprocess(
+            dataset=df,
+            training_set=self.training_set,
+            validation_set=self.validation_set,
+            test_set=self.test_set,
+            training_set_metadata=self.training_set_metadata,
+            data_format=self.data_format,
+            experiment_name=self.experiment_name,
+            model_name=self.model_name,
+            model_resume_path=self.model_resume_path,
+            skip_save_training_description=self.skip_save_training_description,
+            skip_save_training_statistics=self.skip_save_training_statistics,
+            skip_save_model=self.skip_save_model,
+            skip_save_progress=self.skip_save_progress,
+            skip_save_log=self.skip_save_log,
+            skip_save_processed_input=self.skip_save_processed_input,
+            output_directory=self.output_directory,
+            random_seed=self.random_seed,
+        )
+        return preprocessed_data
+
 
 
 @PublicAPI
@@ -350,6 +401,7 @@ class LudwigModel:
         skip_save_processed_input: bool = False,
         output_directory: str = "results",
         random_seed: int = default_random_seed,
+        foresight_datasource: Union[str, Datasource] = None,
         **kwargs,
     ) -> TrainingResults:
         """This function is used to perform a full training of the model on the specified dataset.
@@ -497,71 +549,55 @@ class LudwigModel:
                     makedirs(output_directory, exist_ok=True)
                 description_fn, training_stats_fn, model_dir = get_file_names(output_directory)
 
-            if isinstance(training_set, Dataset) and training_set_metadata is not None:
-                preprocessed_data = (training_set, validation_set, test_set, training_set_metadata)
-            else:
+            # foresight://schema.table_name
+
+            if type(foresight_datasource)==Datasource:
+                dataset = ray.data.read_datasource(foresight_datasource)
+            elif type(foresight_datasource)==str:
+                dataset = ray.data.read_parquet(foresight_datasource)
+
                 # save description
-                if self.backend.is_coordinator():
-                    description = get_experiment_description(
-                        self.config_obj.to_dict(),
-                        dataset=dataset,
-                        training_set=training_set,
-                        validation_set=validation_set,
-                        test_set=test_set,
-                        training_set_metadata=training_set_metadata,
-                        data_format=data_format,
-                        backend=self.backend,
-                        random_seed=random_seed,
-                    )
-
-                    if not skip_save_training_description:
-                        save_json(description_fn, description)
-
-                    # print description
-                    experiment_description = [
-                        ["Experiment name", experiment_name],
-                        ["Model name", model_name],
-                        ["Output directory", output_directory],
-                    ]
-                    for key, value in description.items():
-                        if key != "config":  # Config is printed separately.
-                            experiment_description.append([key, pformat(value, indent=4)])
-
-                    if self.backend.is_coordinator():
-                        print_boxed("EXPERIMENT DESCRIPTION")
-                        logger.info(tabulate(experiment_description, tablefmt="fancy_grid"))
-
-                        print_boxed("LUDWIG CONFIG")
-                        logger.info("User-specified config (with upgrades):\n")
-                        logger.info(pformat(self._user_config, indent=4))
-                        logger.info(
-                            "\nFull config saved to:\n"
-                            f"{output_directory}/{experiment_name}/model/model_hyperparameters.json"
-                        )
-
-                preprocessed_data = self.preprocess(
+            if self.backend.is_coordinator():
+                description = get_experiment_description(
+                    self.config_obj.to_dict(),
                     dataset=dataset,
                     training_set=training_set,
                     validation_set=validation_set,
                     test_set=test_set,
                     training_set_metadata=training_set_metadata,
                     data_format=data_format,
-                    experiment_name=experiment_name,
-                    model_name=model_name,
-                    model_resume_path=model_resume_path,
-                    skip_save_training_description=skip_save_training_description,
-                    skip_save_training_statistics=skip_save_training_statistics,
-                    skip_save_model=skip_save_model,
-                    skip_save_progress=skip_save_progress,
-                    skip_save_log=skip_save_log,
-                    skip_save_processed_input=skip_save_processed_input,
-                    output_directory=output_directory,
+                    backend=self.backend,
                     random_seed=random_seed,
-                    **kwargs,
                 )
-                (training_set, validation_set, test_set, training_set_metadata) = preprocessed_data
 
-            self.training_set_metadata = training_set_metadata
+                if not skip_save_training_description:
+                    save_json(description_fn, description)
+
+                # print description
+                experiment_description = [
+                    ["Experiment name", experiment_name],
+                    ["Model name", model_name],
+                    ["Output directory", output_directory],
+                ]
+                for key, value in description.items():
+                    if key != "config":  # Config is printed separately.
+                        experiment_description.append([key, pformat(value, indent=4)])
+
+                if self.backend.is_coordinator():
+                    print_boxed("EXPERIMENT DESCRIPTION")
+                    logger.info(tabulate(experiment_description, tablefmt="fancy_grid"))
+
+                    print_boxed("LUDWIG CONFIG")
+                    logger.info("User-specified config (with upgrades):\n")
+                    logger.info(pformat(self._user_config, indent=4))
+                    logger.info(
+                        "\nFull config saved to:\n"
+                        f"{output_directory}/{experiment_name}/model/model_hyperparameters.json"
+                    )
+
+            dataset = dataset.map_batches(ProcessBatch, compute="tasks", num_cpus=1.0, batch_format='pandas')
+
+            training_set, validation_set, test_set = dataset.split(n=3)
 
             if self.backend.is_coordinator():
                 dataset_statistics = generate_dataset_statistics(training_set, validation_set, test_set)
@@ -569,7 +605,7 @@ class LudwigModel:
                 if not skip_save_model:
                     # save train set metadata
                     os.makedirs(model_dir, exist_ok=True)
-                    save_json(os.path.join(model_dir, TRAIN_SET_METADATA_FILE_NAME), training_set_metadata)
+                    #save_json(os.path.join(model_dir, TRAIN_SET_METADATA_FILE_NAME), training_set_metadata)
 
                 logger.info("\nDataset Statistics")
                 logger.info(tabulate(dataset_statistics, headers="firstrow", tablefmt="fancy_grid"))
@@ -715,7 +751,6 @@ class LudwigModel:
                     for callback in self.callbacks:
                         callback.on_train_end(output_directory)
 
-                self.training_set_metadata = training_set_metadata
 
                 # Ensure model weights are saved to the driver if training was done remotely
                 if self.backend.is_coordinator() and not skip_save_model:
@@ -725,7 +760,8 @@ class LudwigModel:
                 self.backend.sync_model(self.model)
 
                 print_boxed("FINISHED")
-                return TrainingResults(train_stats, preprocessed_data, output_url)
+                return TrainingResults(train_stats, output_url)
+
 
     def train_online(
         self,
@@ -1419,7 +1455,7 @@ class LudwigModel:
 
     def preprocess(
         self,
-        dataset: Union[str, dict, pd.DataFrame] = None,
+        dataset: Union[str, dict, pd.DataFrame, ray.data.Dataset] = None,
         training_set: Union[str, dict, pd.DataFrame] = None,
         validation_set: Union[str, dict, pd.DataFrame] = None,
         test_set: Union[str, dict, pd.DataFrame] = None,
@@ -1502,14 +1538,14 @@ class LudwigModel:
                     callbacks=self.callbacks,
                 )
 
-            (proc_training_set, proc_validation_set, proc_test_set, training_set_metadata) = preprocessed_data
+            (proc_data_set, training_set_metadata) = preprocessed_data
 
-            return PreprocessedDataset(proc_training_set, proc_validation_set, proc_test_set, training_set_metadata)
+            return proc_data_set
         except Exception as e:
             raise RuntimeError(f"Caught exception during model preprocessing: {str(e)}") from e
         finally:
             for callback in self.callbacks:
-                callback.on_preprocess_end(proc_training_set, proc_validation_set, proc_test_set, training_set_metadata)
+                callback.on_preprocess_end(proc_training_set, None, None, training_set_metadata)
 
     @staticmethod
     def load(
@@ -1742,7 +1778,6 @@ class LudwigModel:
                 self.model, self.config_obj.to_dict(), self.training_set_metadata, device=device
             )
             return torch.jit.script(inference_module)
-
     def save_torchscript(
         self,
         save_path: str,
@@ -1790,6 +1825,7 @@ class LudwigModel:
         model_type = get_from_registry(config_obj.model_type, model_type_registry)
         return model_type(config_obj, random_seed=random_seed)
 
+
     @staticmethod
     def set_logging_level(logging_level: int) -> None:
         """Sets level for log messages.
@@ -1822,7 +1858,6 @@ class LudwigModel:
         """
         self._user_config = user_config
         self.config_obj = ModelConfig.from_dict(self._user_config)
-
 
 @PublicAPI
 def kfold_cross_validate(
@@ -2046,7 +2081,6 @@ def kfold_cross_validate(
     logger.info(f"completed {num_folds:d}-fold cross validation")
 
     return kfold_cv_stats, kfold_split_indices
-
 
 @PublicAPI
 def get_experiment_description(
