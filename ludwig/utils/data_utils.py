@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import yaml
+import ray
 from fsspec.config import conf, set_conf_files
 from pandas.errors import ParserError
 from sklearn.model_selection import KFold
@@ -816,6 +817,8 @@ def clear_data_cache():
 
 @DeveloperAPI
 def figure_data_format_dataset(dataset):
+    if isinstance(dataset, ray.data.Dataset):
+        return ray.data.Dataset
     if isinstance(dataset, CacheableDataset):
         return figure_data_format_dataset(dataset.unwrap())
     elif isinstance(dataset, pd.DataFrame):

@@ -1112,8 +1112,9 @@ def build_dataset(
     Returns:
         A tuple of (dataset, metadata)
     """
-
+    print("Inside build dataset preprocessing")
     df_engine = backend.df_engine
+    print(df_engine)
 
     if df_engine.partitioned:
         if any(f["type"] in REPARTITIONING_FEATURE_TYPES for f in features) and dataset_df.npartitions > 1:
@@ -1129,13 +1130,13 @@ def build_dataset(
             # - In this case, the partitions should remain aligned throughout.
             # - Further, while the indices might not be globally unique, they should be unique within each partition.
             # - These two properties make it possible to do the join op within each partition without a global index.
-            logger.warning(
+            print(
                 f"Dataset has {dataset_df.npartitions} partitions and feature types that cause repartitioning. "
                 f"Resetting index to ensure globally unique indices."
             )
             dataset_df = df_engine.reset_index(dataset_df)
 
-    dataset_df = df_engine.parallelize(dataset_df)
+    #dataset_df = df_engine.parallelize(dataset_df)
 
     if mode == "training":
         sample_ratio = global_preprocessing_parameters["sample_ratio"]
@@ -1179,7 +1180,7 @@ def build_dataset(
     )
 
     # Happens after preprocessing parameters are built, so we can use precomputed fill values.
-    logger.debug("handle missing values")
+    print("handle missing values")
 
     # In some cases, there can be a (temporary) mismatch between the dtype of the column and the type expected by the
     # preprocessing config (e.g., a categorical feature represented as an int-like column). In particular, Dask
@@ -1195,7 +1196,7 @@ def build_dataset(
         handle_missing_values(dataset_cols, feature_config, preprocessing_parameters, backend)
 
     # Happens after missing values are handled to avoid NaN casting issues.
-    logger.debug("cast columns")
+    print("cast columns")
     cast_columns(dataset_cols, feature_configs, backend)
 
     for callback in callbacks or []:
@@ -1696,12 +1697,14 @@ def preprocess_for_training(
     backend=LOCAL_BACKEND,
     random_seed=default_random_seed,
     callbacks=None,
-) -> Tuple[Dataset, Dataset, Dataset, TrainingSetMetadataDict]:
+) -> Tuple[Dataset, TrainingSetMetadataDict]:
     """Returns training, val and test datasets with training set metadata."""
 
     # sanity check to make sure some data source is provided
     if dataset is None and training_set is None:
         raise ValueError("No training data is provided!")
+
+
 
     # preload ludwig datasets
     dataset, training_set, validation_set, test_set = load_dataset_uris(
@@ -1806,63 +1809,11 @@ def preprocess_for_training(
                 random_seed=random_seed,
                 callbacks=callbacks,
             )
-            training_set, test_set, validation_set, training_set_metadata = processed
-            processed = (training_set, test_set, validation_set, training_set_metadata)
+            #training_set, test_set, validation_set, training_set_metadata = processed
 
-            # cache the dataset
-            if backend.cache.can_cache(skip_save_processed_input):
-                with backend.storage.cache.use_credentials():
-                    logger.debug("cache processed data")
-                    processed = cache.put(*processed)
-                    # set cached=True to ensure credentials are used correctly below
-                    cached = True
-            training_set, test_set, validation_set, training_set_metadata = processed
+            data, training_set_metadata = processed
 
-        with backend.storage.cache.use_credentials() if cached else contextlib.nullcontext():
-            logger.debug("create training dataset")
-            training_dataset = backend.dataset_manager.create(training_set, config, training_set_metadata)
-            training_set_size = len(training_dataset)
-            if training_set_size == 0:
-                raise ValueError("Training data is empty following preprocessing.")
-            elif training_set_size < MIN_DATASET_SPLIT_ROWS:
-                raise ValueError(
-                    f"Training dataset has only {training_set_size} rows following preprocessing, need"
-                    f" at least {MIN_DATASET_SPLIT_ROWS} to compute metrics."
-                )
-
-            validation_dataset = None
-            if validation_set is not None:
-                logger.debug("create validation dataset")
-                validation_dataset = backend.dataset_manager.create(validation_set, config, training_set_metadata)
-                validation_set_size = len(validation_dataset)
-                if validation_set_size == 0:
-                    logger.warning(
-                        "Validation set empty. If this is unintentional, please check the preprocessing configuration."
-                    )
-                    validation_dataset = None
-                elif validation_set_size < MIN_DATASET_SPLIT_ROWS:
-                    logger.warning(
-                        f"Validation set too small to compute metrics. Need at least {MIN_DATASET_SPLIT_ROWS} rows, got"
-                        f" {validation_set_size} after preprocessing."
-                    )
-
-            test_dataset = None
-            if test_set is not None:
-                logger.debug("create test dataset")
-                test_dataset = backend.dataset_manager.create(test_set, config, training_set_metadata)
-                test_set_size = len(test_dataset)
-                if test_set_size == 0:
-                    logger.warning(
-                        "Test set empty. If this is unintentional, please check the preprocessing configuration."
-                    )
-                    test_dataset = None
-                elif test_set_size < MIN_DATASET_SPLIT_ROWS:
-                    logger.warning(
-                        f"Test set too small to compute metrics. Need at least {MIN_DATASET_SPLIT_ROWS} rows, got"
-                        f" {test_set_size} after preprocessing."
-                    )
-
-        return (training_dataset, validation_dataset, test_dataset, training_set_metadata)
+        return data, training_set_metadata
 
 
 def _preprocess_file_for_training(
