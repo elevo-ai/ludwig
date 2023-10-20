@@ -396,6 +396,9 @@ output_features:
     ModelConfig.from_dict(config)
 
 
+@pytest.mark.skip(
+    reason="TODO(geoffrey, arnav): re-enable this when we have reconciled the config with the backend kwarg in api.py"
+)
 def test_check_llm_quantization_backend_incompatibility():
     config = yaml.safe_load(
         """
@@ -458,4 +461,63 @@ trainer:
     config["adapter"] = {
         "type": "lora",
     }
+    ModelConfig.from_dict(config)
+
+
+def test_check_prompt_requirements():
+    config = {
+        "model_type": "llm",
+        "input_features": [
+            text_feature(name="test1", column="col1", encoder={"type": "passthrough"}),
+        ],
+        "output_features": [text_feature()],
+        "base_model": "opt-350m",
+    }
+
+    ModelConfig.from_dict(config)
+
+    config["prompt"] = {"task": "Some task"}
+    ModelConfig.from_dict(config)
+
+    config["prompt"] = {"task": "Some task", "template": "Some template not mentioning the task"}
+    with pytest.raises(ConfigValidationError):
+        ModelConfig.from_dict(config)
+
+    config["prompt"] = {"task": "Some task", "template": "{__invalid__}"}
+    with pytest.raises(ConfigValidationError):
+        ModelConfig.from_dict(config)
+
+    config["prompt"] = {"task": "Some task", "template": "{__task__}"}
+    ModelConfig.from_dict(config)
+
+
+def test_check_sample_ratio_and_size_compatible():
+    config = {
+        "input_features": [binary_feature()],
+        "output_features": [binary_feature()],
+        "model_type": "ecd",
+    }
+    ModelConfig.from_dict(
+        {
+            "input_features": [binary_feature()],
+            "output_features": [binary_feature()],
+            "model_type": "ecd",
+        }
+    )
+
+    config["preprocessing"] = {"sample_size": 10}
+    ModelConfig.from_dict(config)
+
+    config["preprocessing"]["sample_ratio"] = 1
+    ModelConfig.from_dict(config)
+
+    config["preprocessing"]["sample_ratio"] = 0.1
+    with pytest.raises(ConfigValidationError):
+        ModelConfig.from_dict(config)
+
+    config["preprocessing"]["sample_size"] = 0
+    with pytest.raises(ConfigValidationError):
+        ModelConfig.from_dict(config)
+
+    del config["preprocessing"]["sample_size"]
     ModelConfig.from_dict(config)

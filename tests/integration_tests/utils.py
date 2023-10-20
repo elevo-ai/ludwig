@@ -180,6 +180,11 @@ def generate_data(
     :param output_features: schema
     :param filename: path to the file where data is stored
     :param nan_percent: percent of values in a feature to be NaN
+    :param with_split: If True, then new column "split" is created, containing integer values as follows:
+        0 -- for training set;
+        1 -- for validation set;
+        2 -- for test set.
+
     :return:
     """
     df = generate_data_as_dataframe(input_features, output_features, num_examples, nan_percent, with_split=with_split)
@@ -197,10 +202,15 @@ def generate_data_as_dataframe(
     """Helper method to generate synthetic data based on input, output feature specs.
 
     Args:
-        num_examples: number of examples to generate
         input_features: schema
         output_features: schema
+        num_examples: number of examples to generate
         nan_percent: percent of values in a feature to be NaN
+        with_split: If True, then new column "split" is created, containing integer values as follows:
+            0 -- for training set;
+            1 -- for validation set;
+            2 -- for test set.
+
     Returns:
         A pandas DataFrame
     """
@@ -520,6 +530,12 @@ def run_experiment(
 
     :param input_features: list of input feature dictionaries
     :param output_features: list of output feature dictionaries
+    :param config: A dictionary containing the Ludwig model configuration
+    :param skip_save_processed_input: (bool, default: `False`) if input
+    dataset is provided it is preprocessed and cached by saving an HDF5
+    and JSON files to avoid running the preprocessing again. If this
+    parameter is `False`, the HDF5 and JSON file are not saved.
+    :param backend: (Union[Backend, str]) `Backend` or string name
     **kwargs you may also pass extra parameters to the experiment as keyword
     arguments
     :return: None
@@ -767,7 +783,7 @@ def create_data_set_to_use(data_format, raw_data, nan_percent=0.0):
     # https://stackoverflow.com/questions/16490261/python-pandas-write-dataframe-to-fixed-width-file-to-fwf
     from tabulate import tabulate
 
-    def to_fwf(df, fname):
+    def to_fwf(df: pd.DataFrame, fname: str):
         content = tabulate(df.values.tolist(), list(df.columns), tablefmt="plain")
         open(fname, "w").write(content)
 
@@ -966,10 +982,17 @@ def train_with_backend(
                             f"Metric mismatch between eval and local. Metrics from eval: "
                             f"{metrics_dict_from_eval.keys()}. Metrics from local: {metrics_dict_from_local.keys()}"
                         )
-                        assert np.isclose(metric_value_from_eval, metric_value_from_local, rtol=1e-03, atol=1e-04), (
-                            f"Metric {metric_name_from_eval} for feature {feature_name_from_eval}: "
-                            f"{metric_value_from_eval} != {metric_value_from_local}"
-                        )
+                        if (
+                            metric_value_from_eval == metric_value_from_eval
+                            and feature_name_from_eval == feature_name_from_eval
+                        ):
+                            # Check for equality if the values are non-nans.
+                            assert np.isclose(
+                                metric_value_from_eval, metric_value_from_local, rtol=1e-03, atol=1e-04
+                            ), (
+                                f"Metric {metric_name_from_eval} for feature {feature_name_from_eval}: "
+                                f"{metric_value_from_eval} != {metric_value_from_local}"
+                            )
 
         return model
 
