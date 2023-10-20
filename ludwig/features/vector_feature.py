@@ -85,19 +85,19 @@ class VectorFeatureMixin:
 
     @staticmethod
     def get_feature_meta(
-        column, preprocessing_parameters: PreprocessingConfigDict, backend, is_input_feature: bool
+            column, preprocessing_parameters: PreprocessingConfigDict, backend, is_input_feature: bool
     ) -> FeatureMetadataDict:
         return {"preprocessing": preprocessing_parameters}
 
     @staticmethod
     def add_feature_data(
-        feature_config,
-        input_df,
-        proc_df,
-        metadata,
-        preprocessing_parameters: PreprocessingConfigDict,
-        backend,
-        skip_save_processed_input,
+            feature_config,
+            input_df,
+            proc_df,
+            metadata,
+            preprocessing_parameters: PreprocessingConfigDict,
+            backend,
+            skip_save_processed_input,
     ):
         """Expects all the vectors to be of the same size.
 
@@ -179,14 +179,16 @@ class VectorInputFeature(VectorFeatureMixin, InputFeature):
 
 class VectorOutputFeature(VectorFeatureMixin, OutputFeature):
     def __init__(
-        self,
-        output_feature_config: Union[VectorOutputFeatureConfig, Dict],
-        output_features: Dict[str, OutputFeature],
-        **kwargs,
+            self,
+            output_feature_config: Union[VectorOutputFeatureConfig, Dict],
+            output_features: Dict[str, OutputFeature],
+            **kwargs,
     ):
         self.vector_size = output_feature_config.vector_size
         super().__init__(output_feature_config, output_features, **kwargs)
         output_feature_config.decoder.output_size = self.vector_size
+        output_feature_config.decoder.height = self.height
+        output_feature_config.decoder.width = self.width
 
         self.decoder_obj = self.initialize_decoder(output_feature_config.decoder)
         self._setup_loss()
@@ -227,9 +229,9 @@ class VectorOutputFeature(VectorFeatureMixin, OutputFeature):
         return {}
 
     def postprocess_predictions(
-        self,
-        result,
-        metadata,
+            self,
+            result,
+            metadata,
     ):
         predictions_col = f"{self.feature_name}_{PREDICTIONS}"
         if predictions_col in result:

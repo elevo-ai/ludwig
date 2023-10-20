@@ -35,6 +35,7 @@ AUDIO = "audio"
 DATE = "date"
 H3 = "h3"
 VECTOR = "vector"
+VECTOR2D = "vector2d"
 HEIGHT = "height"
 WIDTH = "width"
 INFER_IMAGE_DIMENSIONS = "infer_image_dimensions"
@@ -81,6 +82,7 @@ PRECISION = "precision"
 RECALL = "recall"
 SPECIFICITY = "specificity"
 PREDICTIONS = "predictions"
+RESPONSE = "RESPONSE"
 TOP_K = "top_k"
 TOP_K_PREDICTIONS = "top_k_predictions"
 PROBABILITY = "probability"
@@ -249,7 +251,7 @@ AUTOML_MAX_ROWS_PER_CHECKPOINT = 350000
 AUTOML_DEFAULT_IMAGE_ENCODER = "stacked_cnn"
 
 HYPEROPT_WARNING = (
-    "You are running the ludwig train command but there’s a hyperopt section present in your config. "
+    "You are running the ludwig train command but theres a hyperopt section present in your config. "
     "It will be ignored. If you want to run hyperopt you should use the following command: ludwig "
     "hyperopt\n\n"
 )
@@ -281,6 +283,7 @@ POSTPROCESSOR = "postprocessor"
 GENERATION = "generation"
 PROMPT = "prompt"
 ADAPTER = "adapter"
+PRETRAINED_ADAPTER_WEIGHTS = "pretrained_adapter_weights"
 
 # CrossEntropyLoss for LLMs
 IGNORE_INDEX_TOKEN_ID = -100

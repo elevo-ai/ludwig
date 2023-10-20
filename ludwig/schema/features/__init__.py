@@ -11,3 +11,4 @@ import ludwig.schema.features.set_feature
 import ludwig.schema.features.text_feature
 import ludwig.schema.features.timeseries_feature
 import ludwig.schema.features.vector_feature  # noqa
+import ludwig.schema.features.vector2d_feature
