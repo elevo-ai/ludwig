@@ -63,7 +63,7 @@ from tests.integration_tests.utils import (
     vector_feature,
 )
 
-pytestmark = pytest.mark.integration_tests_b
+pytestmark = pytest.mark.integration_tests_d
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -717,6 +717,7 @@ def test_experiment_model_resume(tmpdir):
     shutil.rmtree(output_dir, ignore_errors=True)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "dist_strategy",
     [
@@ -804,6 +805,7 @@ def test_experiment_model_resume_missing_file(tmpdir, missing_file):
     shutil.rmtree(output_dir, ignore_errors=True)
 
 
+@pytest.mark.slow
 @pytest.mark.distributed
 def test_experiment_model_resume_before_1st_epoch_distributed(tmpdir, ray_cluster_4cpu):
     # Single sequence input, single category output
@@ -853,6 +855,7 @@ def test_experiment_model_resume_before_1st_epoch_distributed(tmpdir, ray_cluste
         )
 
 
+@pytest.mark.slow
 @pytest.mark.distributed
 def test_tabnet_with_batch_size_1(tmpdir, ray_cluster_4cpu):
     input_features = [number_feature()]
@@ -1167,3 +1170,27 @@ combiner:
     model = LudwigModel(config, logging_level=logging.INFO)
 
     model.train(dataset=df, output_directory=tmpdir)
+
+
+def test_text_output_feature_cols(tmpdir, csv_filename):
+    """Test ensures that there are 4 output columns when model.predict() is called for text output features."""
+    input_features = [text_feature(encoder={"type": "parallel_cnn"})]
+    output_features = [text_feature(output_feature=True)]
+
+    # Generate test data
+    rel_path = generate_data(input_features, output_features, os.path.join(tmpdir, csv_filename))
+
+    config = {
+        "input_features": input_features,
+        "output_features": output_features,
+        "trainer": {"train_steps": 2, "batch_size": 5},
+    }
+
+    model = LudwigModel(config, logging_level=logging.INFO)
+    model.train(dataset=rel_path, output_directory=tmpdir)
+    predict_output = model.predict(dataset=rel_path)[0]
+
+    assert len(predict_output.columns) == 4
+
+    predict_df_headers = {col_name.split("_")[2] for col_name in list(predict_output.columns)}
+    assert predict_df_headers == {"predictions", "probability", "probabilities", "response"}

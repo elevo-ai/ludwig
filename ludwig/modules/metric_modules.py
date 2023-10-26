@@ -33,7 +33,9 @@ from torchmetrics.classification import (
 )
 from torchmetrics.functional.regression.r2 import _r2_score_compute, _r2_score_update
 from torchmetrics.metric import jit_distributed_available
+from torchmetrics.text import BLEUScore, WordErrorRate
 from torchmetrics.text.perplexity import Perplexity
+from torchmetrics.text.rouge import ROUGEScore
 
 from ludwig.constants import (
     ACCURACY,
@@ -63,6 +65,7 @@ from ludwig.constants import (
     PROBABILITIES,
     R2,
     RECALL,
+    RESPONSE,
     ROC_AUC,
     ROOT_MEAN_SQUARED_ERROR,
     ROOT_MEAN_SQUARED_PERCENTAGE_ERROR,
@@ -390,7 +393,25 @@ class NextTokenPerplexityMetric(MeanMetric):
         return torch.exp(shifted_loss)
 
 
-@register_metric("char_error_rate", [SEQUENCE, TEXT], MINIMIZE, PREDICTIONS)
+@register_metric("bleu", [TEXT], MAXIMIZE, RESPONSE)
+class BLEUScoreMetric(BLEUScore, LudwigMetric):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+
+@register_metric("rouge", [TEXT], MAXIMIZE, RESPONSE)
+class ROUGEScoreMetric(ROUGEScore, LudwigMetric):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+
+@register_metric("word_error_rate", [TEXT], MINIMIZE, RESPONSE)
+class WordErrorRateMetric(WordErrorRate, LudwigMetric):
+    def __init__(self, **kwargs):
+        super().__init__()
+
+
+@register_metric("char_error_rate", [TEXT], MINIMIZE, RESPONSE)
 class CharErrorRateMetric(CharErrorRate, LudwigMetric):
     def __init__(self, **kwargs):
         super().__init__()
