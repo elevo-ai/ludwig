@@ -30,6 +30,7 @@ from ludwig.constants import (
     TEXT,
     TIMESERIES,
     VECTOR,
+    VECTOR2D
 )
 from ludwig.features.audio_feature import AudioFeatureMixin, AudioInputFeature
 from ludwig.features.bag_feature import BagFeatureMixin, BagInputFeature
@@ -43,12 +44,13 @@ from ludwig.features.category_feature import (
 )
 from ludwig.features.date_feature import DateFeatureMixin, DateInputFeature
 from ludwig.features.h3_feature import H3FeatureMixin, H3InputFeature
-from ludwig.features.image_feature import ImageFeatureMixin, ImageInputFeature
+from ludwig.features.image_feature import ImageFeatureMixin, ImageInputFeature, ImageOutputFeature
 from ludwig.features.number_feature import NumberFeatureMixin, NumberInputFeature, NumberOutputFeature
 from ludwig.features.sequence_feature import SequenceFeatureMixin, SequenceInputFeature, SequenceOutputFeature
 from ludwig.features.set_feature import SetFeatureMixin, SetInputFeature, SetOutputFeature
 from ludwig.features.text_feature import TextFeatureMixin, TextInputFeature, TextOutputFeature
 from ludwig.features.timeseries_feature import TimeseriesFeatureMixin, TimeseriesInputFeature, TimeseriesOutputFeature
+from ludwig.features.vector2d_feature import Vector2DOutputFeature, Vector2DFeatureMixin
 from ludwig.features.vector_feature import VectorFeatureMixin, VectorInputFeature, VectorOutputFeature
 from ludwig.utils.misc_utils import get_from_registry
 
@@ -73,6 +75,7 @@ def get_base_type_registry() -> Dict:
         H3: H3FeatureMixin,
         DATE: DateFeatureMixin,
         VECTOR: VectorFeatureMixin,
+        VECTOR2D: Vector2DFeatureMixin,
         CATEGORY_DISTRIBUTION: CategoryDistributionFeatureMixin,
     }
 
@@ -92,7 +95,7 @@ def get_input_type_registry() -> Dict:
         BAG: BagInputFeature,
         H3: H3InputFeature,
         DATE: DateInputFeature,
-        VECTOR: VectorInputFeature,
+        VECTOR: VectorInputFeature
     }
 
 
@@ -101,6 +104,7 @@ def get_output_type_registry() -> Dict:
     return {
         CATEGORY: CategoryOutputFeature,
         BINARY: BinaryOutputFeature,
+        IMAGE: ImageOutputFeature,
         NUMBER: NumberOutputFeature,
         SEQUENCE: SequenceOutputFeature,
         SET: SetOutputFeature,
@@ -108,6 +112,7 @@ def get_output_type_registry() -> Dict:
         TIMESERIES: TimeseriesOutputFeature,
         VECTOR: VectorOutputFeature,
         CATEGORY_DISTRIBUTION: CategoryDistributionOutputFeature,
+        VECTOR2D: Vector2DOutputFeature
     }
 
 

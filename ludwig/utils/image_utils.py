@@ -187,6 +187,8 @@ def read_image_as_numpy(bytes_obj: Optional[bytes] = None) -> Optional[torch.Ten
     """Reads image from bytes object from a numpy file."""
     try:
         with BytesIO(bytes_obj) as buffer:
+            np_from_buffer = np.frombuffer(buffer.getbuffer())
+            return torch.from_numpy(np_from_buffer)
             image = np.load(buffer)
             return torch.from_numpy(image)
     except Exception as e:

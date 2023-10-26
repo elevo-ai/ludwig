@@ -2,7 +2,8 @@ from abc import ABC
 from typing import Dict, List, Tuple, Union
 
 from ludwig.api_annotations import DeveloperAPI
-from ludwig.constants import BINARY, CATEGORY, MODEL_ECD, MODEL_GBM, MODEL_LLM, NUMBER, SET, TIMESERIES, VECTOR
+from ludwig.constants import BINARY, CATEGORY, IMAGE, MODEL_ECD, MODEL_GBM, MODEL_LLM, NUMBER, SET, TIMESERIES, VECTOR, \
+    VECTOR2D
 from ludwig.schema import common_fields
 from ludwig.schema import utils as schema_utils
 from ludwig.schema.decoders.utils import register_decoder_config
@@ -221,6 +222,178 @@ class ProjectorConfig(BaseDecoderConfig):
         description="Clip the output of the decoder to be within the given range.",
         parameter_metadata=DECODER_METADATA["Projector"]["clip"],
     )
+
+
+@DeveloperAPI
+@register_decoder_config("projector2d", [VECTOR2D], model_types=[MODEL_ECD])
+@ludwig_dataclass
+class Projector2dConfig(BaseDecoderConfig):
+    """ProjectorConfig is a dataclass that configures the parameters used for a projector decoder."""
+
+    @classmethod
+    def module_name(cls):
+        return "Projector2d"
+
+    type: str = schema_utils.ProtectedString(
+        "projector",
+        description=DECODER_METADATA["Projector2d"]["type"].long_description,
+    )
+
+    input_size: int = schema_utils.PositiveInteger(
+        default=None,
+        allow_none=True,
+        description="Size of the input to the decoder.",
+        parameter_metadata=DECODER_METADATA["Projector2d"]["input_size"],
+    )
+
+    height: int = schema_utils.PositiveInteger(
+        default=None,
+        allow_none=True,
+        description="Size of the output of the decoder.",
+        parameter_metadata=DECODER_METADATA["Projector2d"]["height"],
+    )
+
+    width: int = schema_utils.PositiveInteger(
+        default=None,
+        allow_none=True,
+        description="Size of the output of the decoder.",
+        parameter_metadata=DECODER_METADATA["Projector2d"]["width"],
+    )
+
+    use_bias: bool = schema_utils.Boolean(
+        default=True,
+        description="Whether the layer uses a bias vector.",
+        parameter_metadata=DECODER_METADATA["Projector2d"]["use_bias"],
+    )
+
+    weights_initializer: str = schema_utils.InitializerOptions(
+        description="Initializer for the weight matrix.",
+        parameter_metadata=DECODER_METADATA["Projector2d"]["weights_initializer"],
+    )
+
+    bias_initializer: str = schema_utils.InitializerOptions(
+        default="zeros",
+        description="Initializer for the bias vector.",
+        parameter_metadata=DECODER_METADATA["Projector2d"]["bias_initializer"],
+    )
+
+    activation: str = schema_utils.ActivationOptions(
+        default=None,
+        description=" Indicates the activation function applied to the output.",
+        parameter_metadata=DECODER_METADATA["Projector2d"]["activation"],
+    )
+
+    multiplier: float = schema_utils.FloatRange(
+        default=1.0,
+        min=0,
+        min_inclusive=False,
+        description=(
+            "Multiplier to scale the activated outputs by. Useful when setting `activation` to something "
+            "that outputs a value between [-1, 1] like tanh to re-scale values back to order of magnitude of "
+            "the data you're trying to predict. A good rule of thumb in such cases is to pick a value like "
+            "`x * (max - min)` where x is a scalar in the range [1, 2]. For example, if you're trying to predict "
+            "something like temperature, it might make sense to pick a multiplier on the order of `100`."
+        ),
+    )
+
+    clip: Union[List[int], Tuple[int]] = schema_utils.FloatRangeTupleDataclassField(
+        n=2,
+        default=None,
+        allow_none=True,
+        min=0,
+        max=999999999,
+        description="Clip the output of the decoder to be within the given range.",
+        parameter_metadata=DECODER_METADATA["Projector2d"]["clip"],
+    )
+
+
+@register_decoder_config("image_projector", [IMAGE], model_types=[MODEL_ECD])
+@ludwig_dataclass
+class ImageProjectorConfig(BaseDecoderConfig):
+   """ImageProjectorConfig is a dataclass that configures the parameters used for a projector decoder."""
+
+   @classmethod
+   def module_name(cls):
+       return "ImageProjector"
+
+   type: str = schema_utils.ProtectedString(
+       "image_projector",
+       description=DECODER_METADATA["ImageProjector"]["type"].long_description,
+   )
+
+   input_size: int = schema_utils.PositiveInteger(
+       default=None,
+       allow_none=True,
+       description="Size of the input to the decoder.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["input_size"],
+   )
+
+   num_channels: int = schema_utils.PositiveInteger(
+       default=None,
+       allow_none=True,
+       description="Size of the output of the decoder.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["num_channels"],
+   )
+
+   height: int = schema_utils.PositiveInteger(
+       default=None,
+       allow_none=True,
+       description="Size of the output of the decoder.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["height"],
+   )
+
+   width: int = schema_utils.PositiveInteger(
+       default=None,
+       allow_none=True,
+       description="Size of the output of the decoder.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["width"],
+   )
+
+   use_bias: bool = schema_utils.Boolean(
+       default=True,
+       description="Whether the layer uses a bias vector.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["use_bias"],
+   )
+
+   weights_initializer: str = schema_utils.InitializerOptions(
+       description="Initializer for the weight matrix.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["weights_initializer"],
+   )
+
+   bias_initializer: str = schema_utils.InitializerOptions(
+       default="zeros",
+       description="Initializer for the bias vector.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["bias_initializer"],
+   )
+
+   activation: str = schema_utils.ActivationOptions(
+       default=None,
+       description=" Indicates the activation function applied to the output.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["activation"],
+   )
+
+   multiplier: float = schema_utils.FloatRange(
+       default=1.0,
+       min=0,
+       min_inclusive=False,
+       description=(
+           "Multiplier to scale the activated outputs by. Useful when setting `activation` to something "
+           "that outputs a value between [-1, 1] like tanh to re-scale values back to order of magnitude of "
+           "the data you're trying to predict. A good rule of thumb in such cases is to pick a value like "
+           "`x * (max - min)` where x is a scalar in the range [1, 2]. For example, if you're trying to predict "
+           "something like temperature, it might make sense to pick a multiplier on the order of `100`."
+       ),
+   )
+
+   clip: Union[List[int], Tuple[int]] = schema_utils.FloatRangeTupleDataclassField(
+       n=2,
+       default=None,
+       allow_none=True,
+       min=0,
+       max=999999999,
+       description="Clip the output of the decoder to be within the given range.",
+       parameter_metadata=DECODER_METADATA["ImageProjector"]["clip"],
+   )
 
 
 @DeveloperAPI
