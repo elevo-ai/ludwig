@@ -7,6 +7,7 @@ from ludwig.constants import (
     CATEGORY,
     CORN,
     HUBER,
+    IMAGE,
     MEAN_ABSOLUTE_ERROR,
     MEAN_ABSOLUTE_PERCENTAGE_ERROR,
     MEAN_SQUARED_ERROR,
@@ -112,7 +113,7 @@ def register_loss(features: Union[str, List[str]]):
 
 
 @DeveloperAPI
-@register_loss([NUMBER, TIMESERIES, VECTOR,VECTOR2D])
+@register_loss([NUMBER, TIMESERIES, VECTOR, VECTOR2D, IMAGE])
 @ludwig_dataclass
 class MSELossConfig(BaseLossConfig):
     type: str = schema_utils.ProtectedString(
@@ -132,7 +133,7 @@ class MSELossConfig(BaseLossConfig):
 
 
 @DeveloperAPI
-@register_loss([NUMBER, TIMESERIES, VECTOR,VECTOR2D])
+@register_loss([NUMBER, TIMESERIES, VECTOR, VECTOR2D, IMAGE])
 @ludwig_dataclass
 class MAELossConfig(BaseLossConfig):
     type: str = schema_utils.ProtectedString(
@@ -152,7 +153,7 @@ class MAELossConfig(BaseLossConfig):
 
 
 @DeveloperAPI
-@register_loss([NUMBER, TIMESERIES, VECTOR,VECTOR2D])
+@register_loss([NUMBER, TIMESERIES, VECTOR, VECTOR2D, IMAGE])
 @ludwig_dataclass
 class MAPELossConfig(BaseLossConfig):
     type: str = schema_utils.ProtectedString(
@@ -251,7 +252,7 @@ class BWCEWLossConfig(BaseLossConfig):
 
 
 @DeveloperAPI
-@register_loss([CATEGORY, VECTOR,VECTOR2D])
+@register_loss([CATEGORY, VECTOR, VECTOR2D, IMAGE])
 @ludwig_dataclass
 class SoftmaxCrossEntropyLossConfig(BaseLossConfig):
     type: str = schema_utils.ProtectedString(
@@ -411,7 +412,7 @@ class SigmoidCrossEntropyLossConfig(BaseLossConfig):
 
 
 @DeveloperAPI
-@register_loss([NUMBER, TIMESERIES, VECTOR ,VECTOR2D])
+@register_loss([NUMBER, TIMESERIES, VECTOR ,VECTOR2D, IMAGE])
 @ludwig_dataclass
 class HuberLossConfig(BaseLossConfig):
     type: str = schema_utils.ProtectedString(

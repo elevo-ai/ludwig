@@ -44,7 +44,7 @@ from ludwig.features.category_feature import (
 )
 from ludwig.features.date_feature import DateFeatureMixin, DateInputFeature
 from ludwig.features.h3_feature import H3FeatureMixin, H3InputFeature
-from ludwig.features.image_feature import ImageFeatureMixin, ImageInputFeature
+from ludwig.features.image_feature import ImageFeatureMixin, ImageInputFeature, ImageOutputFeature
 from ludwig.features.number_feature import NumberFeatureMixin, NumberInputFeature, NumberOutputFeature
 from ludwig.features.sequence_feature import SequenceFeatureMixin, SequenceInputFeature, SequenceOutputFeature
 from ludwig.features.set_feature import SetFeatureMixin, SetInputFeature, SetOutputFeature
@@ -104,6 +104,7 @@ def get_output_type_registry() -> Dict:
     return {
         CATEGORY: CategoryOutputFeature,
         BINARY: BinaryOutputFeature,
+        IMAGE: ImageOutputFeature,
         NUMBER: NumberOutputFeature,
         SEQUENCE: SequenceOutputFeature,
         SET: SetOutputFeature,

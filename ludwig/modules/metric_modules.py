@@ -46,6 +46,7 @@ from ludwig.constants import (
     HITS_AT_K,
     HUBER,
     IGNORE_INDEX_TOKEN_ID,
+    IMAGE,
     JACCARD,
     LOGITS,
     LOSS,
@@ -449,7 +450,7 @@ class MAEMetric(MeanAbsoluteError, LudwigMetric):
         super().update(preds.detach(), target)
 
 
-@register_metric(MEAN_SQUARED_ERROR, [NUMBER, VECTOR, TIMESERIES], MINIMIZE, PREDICTIONS)
+@register_metric(MEAN_SQUARED_ERROR, [NUMBER, VECTOR, TIMESERIES, IMAGE], MINIMIZE, PREDICTIONS)
 class MSEMetric(MeanSquaredError, LudwigMetric):
     def __init__(self, **kwargs):
         super().__init__()

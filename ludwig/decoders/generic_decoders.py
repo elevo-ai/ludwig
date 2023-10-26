@@ -19,11 +19,11 @@ from functools import partial
 import torch
 import torch.nn as nn
 from ludwig.api_annotations import DeveloperAPI
-from ludwig.constants import BINARY, CATEGORY, CATEGORY_DISTRIBUTION, LOSS, NUMBER, SET, TIMESERIES, TYPE, VECTOR, \
+from ludwig.constants import BINARY, CATEGORY, CATEGORY_DISTRIBUTION, IMAGE, LOSS, NUMBER, SET, TIMESERIES, TYPE, VECTOR, \
     VECTOR2D
 from ludwig.decoders.base import Decoder
 from ludwig.decoders.registry import register_decoder
-from ludwig.schema.decoders.base import ClassifierConfig, PassthroughDecoderConfig, ProjectorConfig, RegressorConfig
+from ludwig.schema.decoders.base import ClassifierConfig, PassthroughDecoderConfig, ProjectorConfig, RegressorConfig, ImageProjectorConfig
 from ludwig.utils.torch_utils import Dense, get_activation
 
 logger = logging.getLogger(__name__)
@@ -153,6 +153,76 @@ class Projector(Decoder):
         values = self.activation(self.dense(inputs)) * self.multiplier
         if self.clip:
             values = self.clip(values)
+        return values
+
+
+@register_decoder("image_projector", [IMAGE])
+class ImageProjector(Decoder):
+    def __init__(
+        self,
+        input_size,
+        num_channels,
+        height,
+        width,
+        use_bias=True,
+        weights_initializer="xavier_uniform",
+        bias_initializer="zeros",
+        activation=None,
+        multiplier=1.0,
+        clip=None,
+        decoder_config=None,
+        **kwargs,
+    ):
+        super().__init__()
+        self.config = decoder_config
+
+        self.num_channels = num_channels
+        self.height = height
+        self.width = width
+
+        logger.debug(f" {self.name}")
+        output_size = num_channels*height*width
+        logger.debug("  Dense")
+        self.dense = Dense(
+            input_size=input_size,
+            output_size=output_size,
+            use_bias=use_bias,
+            weights_initializer=weights_initializer,
+            bias_initializer=bias_initializer,
+        )
+
+        self.activation = get_activation(activation)
+        self.multiplier = multiplier
+
+        if clip is not None:
+            if isinstance(clip, (list, tuple)) and len(clip) == 2:
+                self.clip = partial(torch.clip, min=clip[0], max=clip[1])
+            else:
+                raise ValueError(
+                    "The clip parameter of {} is {}. "
+                    "It must be a list or a tuple of length 2.".format(self.feature_name, self.clip)
+                )
+        else:
+            self.clip = None
+
+    @staticmethod
+    def get_schema_cls():
+        return ImageProjectorConfig
+
+    @property
+    def input_shape(self):
+        return self.dense.input_shape
+
+    @property
+    def output_shape(self):
+        return torch.Size([self.num_channels, self.height, self.width])
+
+    def forward(self, inputs, **kwargs):
+        values = self.activation(self.dense(inputs)) * self.multiplier
+        if self.clip:
+            values = self.clip(values)
+
+        values = values.reshape([inputs.shape[0], self.num_channels, self.height, self.width])
         return values
 
 
