@@ -519,10 +519,20 @@ class RayTrainerV2(BaseTrainer):
         self.model.prepare_for_training()
 
         # Set validation field and metric used by trainer
-        self._validation_field = trainer_results.metrics["validation_field"]
-        self._validation_metric = trainer_results.metrics["validation_metric"]
+        if "validation_field" in trainer_results.metrics:
+            self._validation_field = trainer_results.metrics["validation_field"]
+        else:
+            self._validation_field = None
 
-        # Load model from checkpoint
+        if "validation_metric" in trainer_results.metrics:
+            self._validation_metric = trainer_results.metrics["validation_metric"]
+        else:
+            self._validation_metric = None
+
+
+            # Load model from checkpoint
+        logger.info("###### checkpoint: {}".format(trainer_results.checkpoint)) # ***FIXME
+        print("###### checkpoint: {}".format(trainer_results.checkpoint)) # ***FIXME
         ckpt = TorchCheckpoint.from_checkpoint(trainer_results.checkpoint)
         results = ckpt.to_dict()["state_dict"]
 

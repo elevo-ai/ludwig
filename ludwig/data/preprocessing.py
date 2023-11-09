@@ -90,6 +90,7 @@ from ludwig.utils.data_utils import (
     override_in_memory_flag,
     PARQUET_FORMATS,
     PICKLE_FORMATS,
+    RAY_DS_FORMATS,
     read_csv,
     read_excel,
     read_feather,
@@ -118,7 +119,12 @@ from ludwig.utils.defaults import (
 )
 from ludwig.utils.fs_utils import file_lock, path_exists
 from ludwig.utils.misc_utils import get_from_registry, merge_dict
-from ludwig.utils.types import DataFrame, Series
+from ludwig.utils.types import DataFrame, Series, RAY_DATASOURCE
+
+if RAY_DATASOURCE:
+    import ray
+else:
+    ray=None
 
 REPARTITIONING_FEATURE_TYPES = {"image", "audio"}
 
@@ -271,6 +277,61 @@ class DataFramePreprocessor(DataFormatPreprocessor):
     ):
         if isinstance(dataset, pd.DataFrame):
             dataset = backend.df_engine.from_pandas(dataset)
+
+        dataset, training_set_metadata = build_dataset(
+            config,
+            dataset,
+            features,
+            preprocessing_params,
+            mode="prediction",
+            metadata=training_set_metadata,
+            backend=backend,
+            callbacks=callbacks,
+        )
+        return dataset, training_set_metadata, None
+
+
+class RayDsPreprocessor(DataFormatPreprocessor):
+    @staticmethod
+    def preprocess_for_training(
+        config,
+        features,
+        dataset=None,
+        training_set=None,
+        validation_set=None,
+        test_set=None,
+        training_set_metadata=None,
+        skip_save_processed_input=False,
+        preprocessing_params=default_training_preprocessing_parameters,
+        backend=LOCAL_BACKEND,
+        random_seed=default_random_seed,
+        callbacks=None,
+    ):
+        if ray:
+            dataset = ray.data.read_datasource(dataset)
+            dataset = backend.df_engine.from_ray_dataset(dataset)
+
+        return _preprocess_df_for_training(
+            config,
+            features,
+            dataset,
+            training_set,
+            validation_set,
+            test_set,
+            training_set_metadata=training_set_metadata,
+            preprocessing_params=preprocessing_params,
+            backend=backend,
+            random_seed=random_seed,
+            callbacks=callbacks,
+        )
+
+    @staticmethod
+    def preprocess_for_prediction(
+        config, dataset, features, preprocessing_params, training_set_metadata, backend, callbacks
+    ):
+        if ray:
+            dataset = ray.data.read_datasource(dataset)
+            dataset = backend.df_engine.from_ray_dataset(dataset)
 
         dataset, training_set_metadata = build_dataset(
             config,
@@ -1123,6 +1184,7 @@ class HDF5Preprocessor(DataFormatPreprocessor):
 data_format_preprocessor_registry = {
     **{fmt: DictPreprocessor for fmt in DICT_FORMATS},
     **{fmt: DataFramePreprocessor for fmt in DATAFRAME_FORMATS},
+    **{fmt: RayDsPreprocessor for fmt in RAY_DS_FORMATS},
     **{fmt: CSVPreprocessor for fmt in CSV_FORMATS},
     **{fmt: TSVPreprocessor for fmt in TSV_FORMATS},
     **{fmt: JSONPreprocessor for fmt in JSON_FORMATS},

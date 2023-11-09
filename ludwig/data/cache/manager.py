@@ -30,15 +30,24 @@ class DatasetCache:
             logger.exception(f"Failed to load cached training set metadata at {training_set_metadata_fp}")
             return None
 
-        cached_training_set = self.cache_map[TRAINING] if path_exists(self.cache_map[TRAINING]) else None
+        if self.dataset_manager.get_cache_path(TRAINING) or path_exists(self.cache_map[TRAINING]):
+            cached_training_set = self.cache_map[TRAINING]
+        else:
+            cached_training_set = None
         if not cached_training_set:
             logger.warning(f"Failed to load cached training set at {self.cache_map[TRAINING]}")
 
-        cached_validation_set = self.cache_map[VALIDATION] if path_exists(self.cache_map[VALIDATION]) else None
+        if self.dataset_manager.get_cache_path(VALIDATION) or path_exists(self.cache_map[VALIDATION]):
+            cached_validation_set = self.cache_map[VALIDATION]
+        else:
+            cached_validation_set = None
         if not cached_validation_set:
             logger.warning(f"Failed to load cached validation set at {self.cache_map[VALIDATION]}")
 
-        cached_test_set = self.cache_map[TEST] if path_exists(self.cache_map[TEST]) else None
+        if self.dataset_manager.get_cache_path(TEST) or path_exists(self.cache_map[TEST]):
+            cached_test_set = self.cache_map[TEST]
+        else:
+            cached_test_set = None
         if not cached_test_set:
             logger.warning(f"Failed to load cached test set at {self.cache_map[TEST]}")
 
@@ -131,6 +140,11 @@ class CacheManager:
         return calculate_checksum(dataset, config)
 
     def get_cache_path(self, dataset: Optional[CacheableDataset], key: str, tag: str, ext: Optional[str] = None) -> str:
+        cache_path = self._dataset_manager.get_cache_path(tag)
+        if cache_path:
+            # cache path handled by dataset manager
+            return cache_path
+
         if self._cache_dir is None and dataset is not None:
             # Use the input dataset filename (minus the extension) as the cache path
             stem = dataset.get_cache_path()
