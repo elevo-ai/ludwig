@@ -530,9 +530,7 @@ class RayTrainerV2(BaseTrainer):
             self._validation_metric = None
 
 
-            # Load model from checkpoint
-        logger.info("###### checkpoint: {}".format(trainer_results.checkpoint)) # ***FIXME
-        print("###### checkpoint: {}".format(trainer_results.checkpoint)) # ***FIXME
+        # Load model from checkpoint
         ckpt = TorchCheckpoint.from_checkpoint(trainer_results.checkpoint)
         results = ckpt.to_dict()["state_dict"]
 
