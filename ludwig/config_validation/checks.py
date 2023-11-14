@@ -1,6 +1,7 @@
 """Checks that are not easily covered by marshmallow JSON schema validation like parameter interdependencies."""
 
 from abc import ABC, abstractmethod
+from re import findall
 from typing import Callable, TYPE_CHECKING
 
 from transformers import AutoConfig
@@ -12,6 +13,7 @@ from ludwig.constants import (
     CATEGORY,
     IMAGE,
     IN_MEMORY,
+    MIN_QUANTIZATION_BITS_FOR_MERGE_AND_UNLOAD,
     MODEL_ECD,
     MODEL_GBM,
     MODEL_LLM,
@@ -493,6 +495,14 @@ def check_llm_finetuning_trainer_config(config: "ModelConfig"):  # noqa: F821
     if config.model_type != MODEL_LLM:
         return
 
+    if (
+        config.trainer.type == "none"
+        and config.adapter is not None
+        and config.adapter.pretrained_adapter_weights is not None
+    ):
+        # If performing zero-shot, we must specify pretrained adapter weights
+        return
+
     if config.adapter is not None and config.trainer.type != "finetune":
         raise ConfigValidationError("LLM finetuning requires trainer type to be finetune.")
 
@@ -508,7 +518,11 @@ def check_llm_finetuning_backend_config(config: "ModelConfig"):  # noqa: F821
         return
 
     # LLM finetuning is only supported by the finetune trainer type
-    if config.trainer.type != "finetune":
+    if (
+        config.trainer.type != "finetune"
+        and config.adapter is not None
+        and config.adapter.pretrained_adapter_weights is not None
+    ):
         return
 
     # Using local backend, so skip the checks below
@@ -528,9 +542,8 @@ def check_llm_finetuning_backend_config(config: "ModelConfig"):  # noqa: F821
 def check_llm_finetuning_adalora_config(config: "ModelConfig"):
     """Checks that the adalora adapter is configured correctly.
 
-    It requires a set of target_modules to be specified in the config for the model. If it isn't specified by the user,
-    we also check against PEFT's predefined target module list for ADALORA to see if this key is present there. If
-    neither is true, AdaloraModel will run into issues downstream.
+    We check against PEFT's predefined target module list for ADALORA to see if this target_modules is present there. If
+    not, AdaloraModel will run into issues downstream.
     """
     if config.model_type != MODEL_LLM:
         return
@@ -544,10 +557,7 @@ def check_llm_finetuning_adalora_config(config: "ModelConfig"):
     from peft.utils import TRANSFORMERS_MODELS_TO_ADALORA_TARGET_MODULES_MAPPING
 
     model_config = _get_llm_model_config(config.base_model)
-    if (
-        not config.adapter.target_modules
-        and model_config.model_type not in TRANSFORMERS_MODELS_TO_ADALORA_TARGET_MODULES_MAPPING
-    ):
+    if model_config.model_type not in TRANSFORMERS_MODELS_TO_ADALORA_TARGET_MODULES_MAPPING:
         raise ConfigValidationError(
             f"Adalora adapter is not supported for {model_config.model_type} model. "
             f"Supported model types are: {list(TRANSFORMERS_MODELS_TO_ADALORA_TARGET_MODULES_MAPPING.keys())}. "
@@ -571,7 +581,7 @@ def check_llm_finetuning_adaption_prompt_parameters(config: "ModelConfig"):
     if config.adapter.type != "adaption_prompt":
         return
 
-    from peft.tuners.adaption_prompt import TRANSFORMERS_MODEL_CONFIG
+    from peft.tuners.adaption_prompt.config import TRANSFORMERS_MODEL_CONFIG
 
     # Adaption Config is currently only supported for Llama model types
     model_config = _get_llm_model_config(config.base_model)
@@ -587,15 +597,38 @@ def _get_llm_model_config(model_name: str) -> AutoConfig:
     return AutoConfig.from_pretrained(model_name)
 
 
-@register_config_check
+# TODO(geoffrey, arnav): uncomment this when we have reconciled the config with the backend kwarg in api.py
+# @register_config_check
 def check_llm_quantization_backend_incompatibility(config: "ModelConfig") -> None:  # noqa: F821
     """Checks that LLM model type with quantization uses the local backend."""
-    if config.backend is None:
+    if config.model_type != MODEL_LLM:
         return
 
-    backend_type = config.backend.get("type", "local")
-    if config.model_type == MODEL_LLM and config.quantization and backend_type != "local":
+    if config.quantization is None:
+        return
+
+    backend_type = None
+    if config.backend:
+        backend_type = config.backend.get("type", None)
+
+    # If backend was explicitly set to Ray, then we need to raise an error
+    if backend_type == "ray":
         raise ConfigValidationError(f"LLM with quantization requires the 'local' backend, found: '{backend_type}'")
+
+    # If the backend is not explicitly set, then we need to check if a Ray process is running
+    # If a Ray process is running, then we need to raise an error because the backend will be set to Ray
+    if config.backend is None:
+        try:
+            # May not be installed, so we need to catch the ImportError
+            import ray
+
+            if ray.is_initialized():
+                raise ConfigValidationError(
+                    "LLM with quantization requires the 'local' backend, but backend will be set "
+                    "to Ray since Ray is already running locally."
+                )
+        except ImportError:
+            pass
 
 
 @register_config_check
@@ -606,3 +639,90 @@ def check_qlora_requirements(config: "ModelConfig") -> None:  # noqa: F821
 
     if config.quantization and (not config.adapter or config.adapter.type != "lora"):
         raise ConfigValidationError("Fine-tuning and LLM with quantization requires using the 'lora' adapter")
+
+
+@register_config_check
+def check_qlora_merge_and_unload_compatibility(config: "ModelConfig") -> None:  # noqa: F821
+    """Checks that model.merge_and_unload() is supported by underlying model.save_pretrained() when merging QLoRA
+    layers."""
+    if config.model_type != MODEL_LLM or config.trainer.type == "none":
+        return
+
+    if not (
+        config.adapter
+        and config.adapter.type in ["lora", "adalora"]
+        and config.adapter.postprocessor
+        and config.adapter.postprocessor.merge_adapter_into_base_model
+        and config.quantization
+    ):
+        return
+
+    if config.quantization.bits < MIN_QUANTIZATION_BITS_FOR_MERGE_AND_UNLOAD:
+        raise ConfigValidationError(
+            f"""This operation will entail merging LoRA layers on a {config.quantization.bits}-bit \
+quantized model.  Calling "save_pretrained()" on that model is currently unsupported.  If you want to merge the LoRA \
+adapter weights into the base model, you need to use 8-bit quantization or do non-quantized based training by removing \
+the quantization section from your Ludwig configuration."""
+        )
+
+
+@register_config_check
+def check_prompt_requirements(config: "ModelConfig") -> None:  # noqa: F821
+    """Checks that prompt's template and task properties are valid, according to the description on the schema."""
+    if config.model_type != MODEL_LLM:
+        return
+
+    # TODO: `prompt` by default should be set to null, not a default dict:
+    # # If no prompt is provided, no validation necessary:
+    # if not config.prompt:
+    #     return
+    from ludwig.schema.llms.prompt import PromptConfig, RetrievalConfig
+
+    if config.prompt == PromptConfig():
+        return
+
+    template = config.prompt.template
+    task = config.prompt.task
+    retrieval = config.prompt.retrieval
+
+    # If template is NOT provided, then task is required for zero/few shot learning:
+    if not template and not task:
+        raise ConfigValidationError("A prompt task is required if no template is provided!")
+
+    template_refs = set(findall(r"\{(.*?)\}", template)) if isinstance(template, str) else set()
+
+    # If a template IS provided (i.e. we are not doing a built-in zero/few-shot learning), then...
+    if template:
+        # If task is also provided, the template must contain it:
+        if task and "__task__" not in template_refs:
+            raise ConfigValidationError(
+                "When providing a task, you must make sure that the task keyword `{__task__} is "
+                "present somewhere in the template string!"
+            )
+
+        # If retrieval is also provided, the template must reference it:
+        # TODO: retrieval by default should be set to null, not a default dict:
+        if retrieval and retrieval != RetrievalConfig() and "__context__" not in template_refs:
+            raise ConfigValidationError(
+                "When providing a retrieval config, you must make sure that the task keyword `{__context__}` is "
+                "present somewhere in the template string!"
+            )
+
+        # Otherwise, the template should at least contain the sample keyword or some input column:
+        # TODO: len(template_refs) is a hacky attempt to check that there are references to *something* in the
+        # string. The proper validation is to check the references against the features in the user's dataset - but we
+        # do not have access to the dataset in this code path right now.
+        if not task:
+            if len(template_refs) == 0 and "__sample__" not in template_refs:
+                raise ConfigValidationError(
+                    "A template must contain at least one reference to a column or the sample keyword {__sample__} for "
+                    "a JSON-serialized representation of non-output feature columns."
+                )
+
+
+@register_config_check
+def check_sample_ratio_and_size_compatible(config: "ModelConfig") -> None:
+    sample_ratio = config.preprocessing.sample_ratio
+    sample_size = config.preprocessing.sample_size
+    if sample_size is not None and sample_ratio < 1.0:
+        raise ConfigValidationError("sample_size cannot be used when sample_ratio < 1.0")
