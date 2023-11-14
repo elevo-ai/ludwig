@@ -1,10 +1,29 @@
+import logging
 from typing import Dict, Tuple
 
 import torch
 import torch.nn.functional as F
-from transformers import GPT2Tokenizer, GPT2TokenizerFast, LlamaTokenizer, LlamaTokenizerFast, PreTrainedTokenizer
+from bitsandbytes.nn.modules import Embedding
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    CodeLlamaTokenizer,
+    CodeLlamaTokenizerFast,
+    GPT2Tokenizer,
+    GPT2TokenizerFast,
+    LlamaTokenizer,
+    LlamaTokenizerFast,
+    PreTrainedTokenizer,
+)
 
 from ludwig.constants import IGNORE_INDEX_TOKEN_ID, LOGITS, PREDICTIONS, PROBABILITIES
+from ludwig.schema.trainer import LLMTrainerConfig
+from ludwig.utils.model_utils import find_embedding_layer_with_path
+
+logger = logging.getLogger(__name__)
+
+
+FALLBACK_CONTEXT_LEN = 2048
 
 
 def set_pad_token(tokenizer: PreTrainedTokenizer):
@@ -27,9 +46,58 @@ def set_pad_token(tokenizer: PreTrainedTokenizer):
     # These recommend using eos tokens instead
     # https://github.com/huggingface/transformers/issues/2648#issuecomment-616177044
     # https://github.com/huggingface/transformers/issues/2630#issuecomment-1290809338
-    if any(isinstance(tokenizer, t) for t in [GPT2Tokenizer, GPT2TokenizerFast, LlamaTokenizer, LlamaTokenizerFast]):
+    if any(
+        isinstance(tokenizer, t)
+        for t in [
+            GPT2Tokenizer,
+            GPT2TokenizerFast,
+            LlamaTokenizer,
+            LlamaTokenizerFast,
+            CodeLlamaTokenizer,
+            CodeLlamaTokenizerFast,
+        ]
+    ):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
+
+
+def get_context_len(model_config: AutoConfig):
+    """Determines the maximum length of the context (input + output tokens) based on the provided model
+    configuration.
+
+    Args:
+        model_config (AutoConfig): The model configuration object containing information about the model's properties.
+
+    Returns:
+        int: The maximum context length, which can be derived from the model configuration. If no relevant attribute
+             is found, the default value of 2048 is returned.
+
+    This function examines the provided model configuration object to identify the attribute that specifies the maximum
+    context length. It checks for attributes in the following order of preference:
+    1. 'max_sequence_length': If this attribute is present in the model configuration, its value is returned.
+    2. 'max_position_embeddings': If 'max_sequence_length' is not found but 'max_position_embeddings' is present, its
+       value is returned.
+    3. 'n_positions': If neither 'max_sequence_length' nor 'max_position_embeddings' are found, and 'n_positions' is
+       present, its value is returned.
+    4. Default: If none of the relevant attributes are present, the function returns a default value of 2048.
+
+    Note:
+    - The maximum context length is important for defining the size of input and output sequences in a model.
+
+    Example Usage:
+    >>> config = AutoConfig.from_pretrained("bert-base-uncased")
+    >>> context_len = get_context_len(config)
+    >>> print(context_len)
+    512
+    """
+    if hasattr(model_config, "max_sequence_length"):
+        return model_config.max_sequence_length
+    elif hasattr(model_config, "max_position_embeddings"):
+        return model_config.max_position_embeddings
+    elif hasattr(model_config, "n_positions"):
+        return model_config.n_positions
+    else:
+        return FALLBACK_CONTEXT_LEN
 
 
 def has_padding_token(input_tensor: torch.Tensor, tokenizer: PreTrainedTokenizer):
@@ -376,3 +444,48 @@ def realign_target_and_prediction_tensors_for_inference(
         targets[of_name] = F.pad(targets[of_name], (0, zeros_to_add), value=pad_value).to(torch.int64)
 
     return targets, predictions
+
+
+def update_embedding_layer(model: AutoModelForCausalLM, config_obj: LLMTrainerConfig) -> AutoModelForCausalLM:
+    """Updates the embedding layer of the model to use the 8-bit embedding layer from bitsandbytes.nn.modules.
+
+    This is necessary when using 8-bit optimizers from bitsandbytes.
+    See: https://github.com/TimDettmers/bitsandbytes#tldr
+    """
+    # If we're using an 8-bit optimizer, we need to replace the embedding layer with a custom embedding layer from
+    # bnb.nn.modules.Embedding.
+    if hasattr(config_obj, "optimizer") and config_obj.optimizer.is_8bit:
+        embedding_layer, module_path = find_embedding_layer_with_path(model)
+        if embedding_layer is None:
+            raise ValueError(
+                "Could not find an embedding layer in the model. This is required when using 8-bit optimizers"
+                "  since a custom 8-bit embedding layer is used in place of the original embedding layer."
+            )
+
+        # Initialize the BNB embedding layer with the same parameters and weights as the original embedding layer.
+        bnb_embedding = Embedding(
+            num_embeddings=embedding_layer.num_embeddings,
+            embedding_dim=embedding_layer.embedding_dim,
+            padding_idx=embedding_layer.padding_idx,
+            max_norm=embedding_layer.max_norm,
+            norm_type=embedding_layer.norm_type,
+            scale_grad_by_freq=embedding_layer.scale_grad_by_freq,
+            sparse=embedding_layer.sparse,
+            _weight=embedding_layer.weight,
+            device=model.device,
+        )
+
+        # Update the model's original embedding layer to use the BNB embedding layer using the module_path
+        # returned by find_embedding_layer_with_path.
+        module_path = module_path.split(".")
+        module = model
+        for module_name in module_path[:-1]:
+            module = getattr(module, module_name)
+        setattr(module, module_path[-1], bnb_embedding)
+
+        # Set the get input embeddings lambda function to return the BNB embedding layer
+        model.get_input_embeddings = lambda: bnb_embedding
+
+        logger.info("Updated the pretrained embedding layer to use the embedding layer from bitsandbytes.")
+
+    return model
