@@ -83,6 +83,9 @@ class Backend(ABC):
     def initialize(self):
         raise NotImplementedError()
 
+    def initialize_cache_path(self, **kwargs):
+        self._dataset_manager.initialize_cache_path(**kwargs)
+
     @abstractmethod
     def initialize_pytorch(self, *args, **kwargs):
         raise NotImplementedError()
