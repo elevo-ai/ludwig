@@ -30,6 +30,7 @@ from ludwig.schema.features.loss.loss import (
     BaseLossConfig,
     BWCEWLossConfig,
     CORNLossConfig,
+    DiceLossConfig,
     HuberLossConfig,
     MAELossConfig,
     MAPELossConfig,
@@ -170,7 +171,7 @@ class SoftmaxCrossEntropyLoss(nn.Module, LogitsInputsMixin):
             target: Tensor of shape [batch], where each element is integral
                 between 0 and num_classes.
         """
-        if len(target.shape) == 1:
+        if len(target.shape) == 1 or len(target.shape) == 3:
             # Assumes we are providing the target as a single class, rather than a distribution
             target = target.long()
         return self.loss_fn(preds, target)
@@ -264,3 +265,29 @@ class CORNLoss(nn.Module, LogitsInputsMixin):
     def forward(self, preds: Tensor, target: Tensor) -> Tensor:
         num_classes = preds.shape[1]
         return corn_loss(preds, target, num_classes=num_classes)
+
+
+@register_loss(DiceLossConfig)
+class DiceLoss(nn.Module, LogitsInputsMixin):
+    def __init__(self, config: DiceLossConfig):
+        super().__init__()
+
+    def forward(self, preds: Tensor, target: Tensor) -> Tensor:
+        """
+        Params:
+            preds: Tensor of shape [batch x num_classes x H x W]
+            target: Tensor of shape [batch x H x W], where each element is integral
+                between 0 and num_classes.
+        """
+        num_classes = preds.shape[1]
+        if num_classes == 1:
+            preds = preds.squeeze(1).sigmoid()
+        else:
+            preds = preds.softmax(dim=1)
+            target = nn.functional.one_hot(target.long(), num_classes).permute(0, 3, 1, 2)
+
+        intersect = (preds * target).sum(dim=(1,2,3))
+        union_sum = preds.sum(dim=(1,2,3)) + target.sum(dim=(1,2,3))
+        smooth = 1
+        dice_coeff = (2 * intersect + smooth ) / (union_sum + smooth)
+        return 1 - dice_coeff.mean()

@@ -899,7 +899,7 @@ class LudwigModel:
 
         # preprocessing
         logger.debug("Preprocessing")
-        dataset, _ = preprocess_for_prediction(  # TODO (Connor): Refactor to use self.config_obj
+        dataset, _, postproc_dataset = preprocess_for_prediction(  # TODO (Connor): Refactor to use self.config_obj
             self.config_obj.to_dict(),
             dataset=dataset,
             training_set_metadata=self.training_set_metadata,
@@ -933,6 +933,8 @@ class LudwigModel:
                     makedirs(output_directory, exist_ok=True)
 
             logger.debug("Postprocessing")
+            if postproc_dataset is not None:
+                predictions = self.backend.df_engine.df_lib.concat([predictions, postproc_dataset], axis=1)
             postproc_predictions = postprocess(
                 predictions,
                 self.model.output_features,
