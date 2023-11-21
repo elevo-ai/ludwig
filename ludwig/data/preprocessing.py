@@ -215,7 +215,7 @@ class DictPreprocessor(DataFormatPreprocessor):
     def preprocess_for_prediction(
         config, dataset, features, preprocessing_params, training_set_metadata, backend, callbacks
     ):
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             pd.DataFrame(dataset),
             features,
@@ -225,7 +225,7 @@ class DictPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class DataFramePreprocessor(DataFormatPreprocessor):
@@ -272,7 +272,7 @@ class DataFramePreprocessor(DataFormatPreprocessor):
         if isinstance(dataset, pd.DataFrame):
             dataset = backend.df_engine.from_pandas(dataset)
 
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset,
             features,
@@ -282,7 +282,7 @@ class DataFramePreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class CSVPreprocessor(DataFormatPreprocessor):
@@ -323,7 +323,7 @@ class CSVPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_csv(dataset, df_lib=backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -333,7 +333,7 @@ class CSVPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class TSVPreprocessor(DataFormatPreprocessor):
@@ -374,7 +374,7 @@ class TSVPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_tsv(dataset, df_lib=backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -384,7 +384,7 @@ class TSVPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class JSONPreprocessor(DataFormatPreprocessor):
@@ -425,7 +425,7 @@ class JSONPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_json(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -435,7 +435,7 @@ class JSONPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class JSONLPreprocessor(DataFormatPreprocessor):
@@ -476,7 +476,7 @@ class JSONLPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_jsonl(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -486,7 +486,7 @@ class JSONLPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class ExcelPreprocessor(DataFormatPreprocessor):
@@ -527,7 +527,7 @@ class ExcelPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_excel(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -537,7 +537,7 @@ class ExcelPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class ParquetPreprocessor(DataFormatPreprocessor):
@@ -578,7 +578,7 @@ class ParquetPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_parquet(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -588,7 +588,7 @@ class ParquetPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
     @staticmethod
     def prepare_processed_data(
@@ -658,7 +658,7 @@ class PicklePreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_pickle(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -668,7 +668,7 @@ class PicklePreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class FatherPreprocessor(DataFormatPreprocessor):
@@ -709,7 +709,7 @@ class FatherPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_feather(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -719,7 +719,7 @@ class FatherPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class FWFPreprocessor(DataFormatPreprocessor):
@@ -760,7 +760,7 @@ class FWFPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_fwf(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -770,7 +770,7 @@ class FWFPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class HTMLPreprocessor(DataFormatPreprocessor):
@@ -811,7 +811,7 @@ class HTMLPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_html(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -821,7 +821,7 @@ class HTMLPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class ORCPreprocessor(DataFormatPreprocessor):
@@ -862,7 +862,7 @@ class ORCPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_orc(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -872,7 +872,7 @@ class ORCPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class SASPreprocessor(DataFormatPreprocessor):
@@ -913,7 +913,7 @@ class SASPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_sas(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -923,7 +923,7 @@ class SASPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class SPSSPreprocessor(DataFormatPreprocessor):
@@ -964,7 +964,7 @@ class SPSSPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_spss(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -974,7 +974,7 @@ class SPSSPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class StataPreprocessor(DataFormatPreprocessor):
@@ -1015,7 +1015,7 @@ class StataPreprocessor(DataFormatPreprocessor):
     ):
         dataset_df = read_stata(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
-        dataset, training_set_metadata = build_dataset(
+        dataset, training_set_metadata, postproc_dataset = build_dataset(
             config,
             dataset_df,
             features,
@@ -1025,7 +1025,7 @@ class StataPreprocessor(DataFormatPreprocessor):
             backend=backend,
             callbacks=callbacks,
         )
-        return dataset, training_set_metadata, None
+        return dataset, training_set_metadata, None, postproc_dataset
 
 
 class HDF5Preprocessor(DataFormatPreprocessor):
@@ -1063,7 +1063,7 @@ class HDF5Preprocessor(DataFormatPreprocessor):
     ):
         hdf5_fp = dataset
         dataset = load_hdf5(dataset, preprocessing_params, backend, split_data=False, shuffle_training=False)
-        return dataset, training_set_metadata, hdf5_fp
+        return dataset, training_set_metadata, hdf5_fp, None
 
     @staticmethod
     def prepare_processed_data(
@@ -1168,7 +1168,7 @@ def build_dataset(
         callbacks: List of callbacks
 
     Returns:
-        A tuple of (dataset, metadata)
+        A tuple of (dataset, metadata, postproc_dataset)
     """
 
     df_engine = backend.df_engine
@@ -1367,7 +1367,20 @@ def build_dataset(
     # Embed features with fixed encoders
     dataset = embed_fixed_features(dataset, feature_configs, metadata, backend)
 
-    return dataset, metadata
+    # Extract column names that match "<output_feature_name>_postproc_predictions" for prediction post processing
+    postproc_dataset = None
+    if mode == "prediction":
+        postproc_cols = {}
+        output_features = config["output_features"]
+        for col_name in dataset_df:
+            if col_name not in proc_cols and col_name.endswith("_postproc_predictions"):
+                for output_feature in output_features:
+                    if col_name == output_feature[COLUMN] + "_postproc_predictions":
+                        postproc_cols[col_name] = dataset_df[col_name]
+        if len(postproc_cols):
+            postproc_dataset = df_engine.from_pandas(pd.DataFrame(postproc_cols))
+
+    return dataset, metadata, postproc_dataset
 
 
 def embed_fixed_features(
@@ -2085,7 +2098,7 @@ def _preprocess_file_for_training(
         dataset_df = read_fn(dataset, backend.df_engine.df_lib)
         training_set_metadata[SRC] = dataset
 
-        data, training_set_metadata = build_dataset(
+        data, training_set_metadata, _ = build_dataset(
             config,
             dataset_df,
             features,
@@ -2111,7 +2124,7 @@ def _preprocess_file_for_training(
         # Data is pre-split.
         preprocessing_params = set_fixed_split(preprocessing_params)
 
-        data, training_set_metadata = build_dataset(
+        data, training_set_metadata, _ = build_dataset(
             config,
             concatenated_df,
             features,
@@ -2183,7 +2196,7 @@ def _preprocess_df_for_training(
 
     logger.info("Building dataset (it may take a while)")
 
-    data, training_set_metadata = build_dataset(
+    data, training_set_metadata, _ = build_dataset(
         config,
         dataset,
         features,
@@ -2282,6 +2295,7 @@ def preprocess_for_prediction(
     dataset = wrap(dataset)
     cache = backend.cache.get_dataset_cache(config, dataset)
     dataset = dataset.unwrap()
+    postproc_dataset = None
 
     training_set = test_set = validation_set = None
     if data_format in CACHEABLE_FORMATS and split != FULL:
@@ -2314,7 +2328,7 @@ def preprocess_for_prediction(
         processed = data_format_processor.preprocess_for_prediction(
             config, dataset, features, preprocessing_params, training_set_metadata, backend, callbacks
         )
-        dataset, training_set_metadata, new_hdf5_fp = processed
+        dataset, training_set_metadata, new_hdf5_fp, postproc_dataset = processed
         training_set_metadata = training_set_metadata.copy()
 
         if new_hdf5_fp:
@@ -2345,7 +2359,7 @@ def preprocess_for_prediction(
             training_set_metadata,
         )
 
-    return dataset, training_set_metadata
+    return dataset, training_set_metadata, postproc_dataset
 
 
 def _get_cache_hit_message(cache: DatasetCache) -> str:
