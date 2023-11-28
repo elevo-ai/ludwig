@@ -24,7 +24,7 @@ from typing import Optional, Union
 
 from ludwig.api_annotations import DeveloperAPI
 from ludwig.utils.fs_utils import checksum
-from ludwig.utils.types import DataFrame
+from ludwig.utils.types import DataFrame, RAY_DATASOURCE
 
 
 def alphanum(v):
@@ -66,6 +66,22 @@ class CacheableDataframe(CacheableDataset):
     def unwrap(self) -> Union[str, DataFrame]:
         return self.df
 
+@DeveloperAPI
+@dataclass
+class CacheableDatasource(CacheableDataset):
+    ds: Union[RAY_DATASOURCE]
+    name: str
+    checksum: str
+
+    def get_cache_path(self) -> str:
+        return alphanum(self.name)
+
+    def get_cache_directory(self) -> str:
+        return os.getcwd()
+
+    def unwrap(self) -> Union[RAY_DATASOURCE]:
+        return self.ds
+
 
 @DeveloperAPI
 @dataclass
@@ -90,7 +106,7 @@ class CacheablePath(CacheableDataset):
         return self.path
 
 
-CacheInput = Union[str, DataFrame, CacheableDataset]
+CacheInput = Union[str, DataFrame, RAY_DATASOURCE, CacheableDataset]
 
 
 def wrap(dataset: Optional[CacheInput]) -> CacheableDataset:
@@ -105,4 +121,8 @@ def wrap(dataset: Optional[CacheInput]) -> CacheableDataset:
     # TODO(travis): could try hashing the in-memory dataset, but this is tricky for Dask
     checksum = str(uuid.uuid1())
     name = checksum
+
+    if isinstance(dataset, RAY_DATASOURCE):
+        return CacheableDatasource(ds=dataset, name=name, checksum=checksum)
+
     return CacheableDataframe(df=dataset, name=name, checksum=checksum)

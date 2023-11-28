@@ -33,7 +33,7 @@ from ray.data.dataset_pipeline import DatasetPipeline
 
 from ludwig.api_annotations import DeveloperAPI
 from ludwig.backend.base import Backend
-from ludwig.constants import NAME
+from ludwig.constants import NAME, META, TEST, TRAINING, VALIDATION
 from ludwig.data.batcher.base import Batcher
 from ludwig.data.dataset.base import Dataset, DatasetManager
 from ludwig.distributed import DistributedStrategy
@@ -45,7 +45,7 @@ from ludwig.utils.defaults import default_random_seed
 from ludwig.utils.error_handling_utils import default_retry
 from ludwig.utils.fs_utils import get_fs_and_path
 from ludwig.utils.misc_utils import get_proc_features
-from ludwig.utils.types import DataFrame
+from ludwig.utils.types import DataFrame, RAY_DATASOURCE
 
 logger = logging.getLogger(__name__)
 
@@ -87,14 +87,19 @@ class RayDataset(Dataset):
 
     def __init__(
         self,
-        df: Union[str, DataFrame],
+        df: Union[str, DataFrame, RAY_DATASOURCE],
         features: Dict[str, FeatureConfigDict],
         training_set_metadata: TrainingSetMetadataDict,
         backend: Backend,
         window_size_bytes: Optional[Union[int, Literal["auto"]]] = None,
     ):
         self.df_engine = backend.df_engine
-        self.ds = self.df_engine.to_ray_dataset(df) if not isinstance(df, str) else read_remote_parquet(df)
+        if isinstance(df, str):
+            self.ds = read_remote_parquet(df)
+        elif isinstance(df, RAY_DATASOURCE):
+            self.ds = ray.data.read_datasource(df)
+        else:
+            self.ds = self.df_engine.to_ray_dataset(df)
         self.features = features
         self.training_set_metadata = training_set_metadata
         self.data_hdf5_fp = training_set_metadata.get(DATA_TRAIN_HDF5_FP)
@@ -198,6 +203,12 @@ class RayDataset(Dataset):
 class RayDatasetManager(DatasetManager):
     def __init__(self, backend):
         self.backend = backend
+        self.cache_map = {
+            META: None,
+            TRAINING: None,
+            TEST: None,
+            VALIDATION: None,
+        }
 
     def create(
         self,
@@ -206,6 +217,8 @@ class RayDatasetManager(DatasetManager):
         training_set_metadata: TrainingSetMetadataDict,
     ) -> "RayDataset":
         """Create a new Ray dataset with config."""
+        if isinstance(dataset, str) and dataset in [TRAINING, TEST, VALIDATION] and self.cache_map[dataset]:
+            dataset = self.cache_map[dataset]
         window_size_bytes = self.backend._data_loader_kwargs.get("window_size_bytes", None)
         return RayDataset(
             dataset, get_proc_features(config), training_set_metadata, self.backend, window_size_bytes=window_size_bytes
@@ -219,7 +232,11 @@ class RayDatasetManager(DatasetManager):
         training_set_metadata: TrainingSetMetadataDict,
         tag: str,
     ):
-        self.backend.df_engine.to_parquet(dataset, cache_path)
+        if cache_path in [TRAINING, TEST, VALIDATION] and self.cache_map[cache_path]:
+            ds = self.backend.df_engine.to_ray_dataset(dataset)
+            ds.write_datasource(self.cache_map[cache_path])
+        else:
+            self.backend.df_engine.to_parquet(dataset, cache_path)
         return cache_path
 
     def can_cache(self, skip_save_processed_input):
@@ -228,6 +245,26 @@ class RayDatasetManager(DatasetManager):
     @property
     def data_format(self):
         return "parquet"
+
+    def initialize_cache_path(
+            self,
+            training_cache_ds: RAY_DATASOURCE = None,
+            test_cache_ds: RAY_DATASOURCE = None,
+            validation_cache_ds: RAY_DATASOURCE = None,
+    ):
+        self.cache_map = {
+            META: None,
+            TRAINING: training_cache_ds,
+            TEST: test_cache_ds,
+            VALIDATION: validation_cache_ds,
+        }
+
+    def get_cache_path(self, tag: str):
+        if self.cache_map[tag]:
+            return tag
+        else:
+            return None
+
 
 
 @DeveloperAPI

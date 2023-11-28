@@ -71,3 +71,11 @@ class DatasetManager(ABC):
     @abstractmethod
     def data_format(self):
         raise NotImplementedError()
+
+    @abstractmethod
+    def initialize_cache_path(self, **kwargs):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_cache_path(self, tag: str):
+        raise NotImplementedError()

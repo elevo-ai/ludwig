@@ -48,7 +48,7 @@ from ludwig.utils.dataframe_utils import from_numpy_dataset, is_dask_lib, to_num
 from ludwig.utils.fs_utils import download_h5, has_remote_protocol, open_file, upload_h5
 from ludwig.utils.math_utils import cumsum
 from ludwig.utils.misc_utils import get_from_registry
-from ludwig.utils.types import DataFrame
+from ludwig.utils.types import DataFrame, RAY_DATASOURCE
 
 try:
     import dask
@@ -58,6 +58,11 @@ try:
 except ImportError:
     DASK_DF_FORMATS = set()
     dd = None
+
+if RAY_DATASOURCE:
+    RAY_DS_FORMATS = {RAY_DATASOURCE}
+else:
+    RAY_DS_FORMATS = set()
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +109,7 @@ CACHEABLE_FORMATS = set.union(
         SPSS_FORMATS,
         STATA_FORMATS,
         DATAFRAME_FORMATS,
+        RAY_DS_FORMATS,
     )
 )
 
@@ -866,6 +872,8 @@ def figure_data_format_dataset(dataset):
         return pd.DataFrame
     elif dd and isinstance(dataset, dd.core.DataFrame):
         return dd.core.DataFrame
+    elif RAY_DATASOURCE and isinstance(dataset, RAY_DATASOURCE):
+        return RAY_DATASOURCE
     elif isinstance(dataset, dict):
         return dict
     elif isinstance(dataset, str):
