@@ -104,7 +104,7 @@ from ludwig.utils.misc_utils import (
 from ludwig.utils.print_utils import print_boxed
 from ludwig.utils.torch_utils import DEVICE
 from ludwig.utils.trainer_utils import get_training_report
-from ludwig.utils.types import DataFrame, TorchDevice
+from ludwig.utils.types import DataFrame, TorchDevice, RAY_DATASOURCE
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +274,9 @@ class LudwigModel:
         gpu_memory_limit: Optional[float] = None,
         allow_parallel_threads: bool = True,
         callbacks: List[Callback] = None,
+        training_cache_ds: Union[RAY_DATASOURCE] = None,
+        validation_cache_ds: Union[RAY_DATASOURCE] = None,
+        test_cache_ds: Union[RAY_DATASOURCE] = None,
     ) -> None:
         """Constructor for the Ludwig Model class.
 
@@ -294,6 +297,12 @@ class LudwigModel:
         :param callbacks: (list, default: `None`) a list of
               `ludwig.callbacks.Callback` objects that provide hooks into the
                Ludwig pipeline.
+        :param training_cache_ds: (Union[RAY_DATASOURCE], default: `None`) cache
+              location for the training dataset
+        :param validation_cache_ds: (Union[RAY_DATASOURCE], default: `None`) cache
+              location for the validation dataset
+        :param test_cache_ds: (Union[RAY_DATASOURCE], default: `None`) cache
+              location for the test dataset
 
         # Return
 
@@ -319,6 +328,13 @@ class LudwigModel:
         self.backend = initialize_backend(backend or self._user_config.get("backend"))
         self.callbacks = callbacks if callbacks is not None else []
 
+        # setup cache locations
+        self.backend.initialize_cache_path(
+            training_cache_ds=training_cache_ds,
+            validation_cache_ds=validation_cache_ds,
+            test_cache_ds=test_cache_ds
+        )
+
         # setup PyTorch env (GPU allocation, etc.)
         self.backend.initialize_pytorch(
             gpus=gpus, gpu_memory_limit=gpu_memory_limit, allow_parallel_threads=allow_parallel_threads
@@ -333,7 +349,7 @@ class LudwigModel:
 
     def train(
         self,
-        dataset: Union[str, dict, pd.DataFrame] = None,
+        dataset: Union[str, dict, pd.DataFrame, RAY_DATASOURCE] = None,
         training_set: Union[str, dict, pd.DataFrame, Dataset] = None,
         validation_set: Union[str, dict, pd.DataFrame, Dataset] = None,
         test_set: Union[str, dict, pd.DataFrame, Dataset] = None,
@@ -362,7 +378,7 @@ class LudwigModel:
 
         # Inputs
 
-        :param dataset: (Union[str, dict, pandas.DataFrame], default: `None`)
+        :param dataset: (Union[str, dict, pandas.DataFrame, RAY_DATASOURCE], default: `None`)
             source containing the entire dataset to be used in the experiment.
             If it has a split column, it will be used for splitting
             (0 for train, 1 for validation, 2 for test),
@@ -1445,7 +1461,7 @@ class LudwigModel:
 
     def preprocess(
         self,
-        dataset: Union[str, dict, pd.DataFrame] = None,
+        dataset: Union[str, dict, pd.DataFrame, RAY_DATASOURCE] = None,
         training_set: Union[str, dict, pd.DataFrame] = None,
         validation_set: Union[str, dict, pd.DataFrame] = None,
         test_set: Union[str, dict, pd.DataFrame] = None,
@@ -1458,7 +1474,7 @@ class LudwigModel:
         """This function is used to preprocess data.
 
         # Args:
-            :param dataset: (Union[str, dict, pandas.DataFrame], default: `None`)
+            :param dataset: (Union[str, dict, pandas.DataFrame, RAY_DATASOURCE], default: `None`)
                 source containing the entire dataset to be used in the experiment.
                 If it has a split column, it will be used for splitting
                 (0 for train, 1 for validation, 2 for test),

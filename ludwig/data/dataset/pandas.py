@@ -133,3 +133,9 @@ class PandasDatasetManager(DatasetManager):
     @property
     def data_format(self):
         return "hdf5"
+
+    def initialize_cache_path(self, **kwargs):
+        pass
+
+    def get_cache_path(self, tag: str):
+        return None
