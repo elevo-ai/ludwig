@@ -45,8 +45,10 @@ from ludwig.constants import (
     CATEGORY,
     CATEGORY_DISTRIBUTION,
     CORN,
+    DICE,
     HITS_AT_K,
     HUBER,
+    IMAGE,
     IGNORE_INDEX_TOKEN_ID,
     JACCARD,
     LOGITS,
@@ -81,6 +83,7 @@ from ludwig.distributed import get_current_dist_strategy
 from ludwig.modules.loss_modules import (
     BWCEWLoss,
     CORNLoss,
+    DiceLoss,
     HuberLoss,
     NextTokenSoftmaxCrossEntropyLoss,
     SequenceSoftmaxCrossEntropyLoss,
@@ -91,6 +94,7 @@ from ludwig.modules.metric_registry import get_metric_objective, get_metric_regi
 from ludwig.schema.features.loss.loss import (
     BWCEWLossConfig,
     CORNLossConfig,
+    DiceLossConfig,
     HuberLossConfig,
     SequenceSoftmaxCrossEntropyLossConfig,
     SigmoidCrossEntropyLossConfig,
@@ -307,7 +311,7 @@ class BWCEWLMetric(LossMetric):
         return self.loss_function(preds, target)
 
 
-@register_metric("softmax_cross_entropy", [CATEGORY, CATEGORY_DISTRIBUTION], MINIMIZE, LOGITS)
+@register_metric("softmax_cross_entropy", [CATEGORY, CATEGORY_DISTRIBUTION, IMAGE], MINIMIZE, LOGITS)
 class SoftmaxCrossEntropyMetric(LossMetric):
     def __init__(self, config: SoftmaxCrossEntropyLossConfig, **kwargs):
         super().__init__()
@@ -530,6 +534,20 @@ class CORNMetric(LossMetric):
     ):
         super().__init__()
         self.loss_function = CORNLoss(config=config)
+
+    def get_current_value(self, preds: Tensor, target: Tensor) -> Tensor:
+        return self.loss_function(preds, target)
+
+
+@register_metric(DICE, [IMAGE], MINIMIZE, LOGITS)
+class DiceMetric(LossMetric):
+    def __init__(
+        self,
+        config: DiceLossConfig,
+        **kwargs,
+    ):
+        super().__init__()
+        self.loss_function = DiceLoss(config=config)
 
     def get_current_value(self, preds: Tensor, target: Tensor) -> Tensor:
         return self.loss_function(preds, target)

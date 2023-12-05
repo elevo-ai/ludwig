@@ -6,7 +6,9 @@ from ludwig.constants import (
     BINARY_WEIGHTED_CROSS_ENTROPY,
     CATEGORY,
     CORN,
+    DICE,
     HUBER,
+    IMAGE,
     MEAN_ABSOLUTE_ERROR,
     MEAN_ABSOLUTE_PERCENTAGE_ERROR,
     MEAN_SQUARED_ERROR,
@@ -251,7 +253,7 @@ class BWCEWLossConfig(BaseLossConfig):
 
 
 @DeveloperAPI
-@register_loss([CATEGORY, VECTOR])
+@register_loss([CATEGORY, VECTOR, IMAGE])
 @ludwig_dataclass
 class SoftmaxCrossEntropyLossConfig(BaseLossConfig):
     type: str = schema_utils.ProtectedString(
@@ -475,3 +477,18 @@ class CORNLossConfig(BaseLossConfig):
     @property
     def class_similarities_temperature(self) -> int:
         return 0
+
+
+@DeveloperAPI
+@register_loss([IMAGE])
+@ludwig_dataclass
+class DiceLossConfig(BaseLossConfig):
+    """Loss based on Sorensen-Dice coefficient. """
+
+    type: str = schema_utils.ProtectedString(
+        DICE,
+        description="Type of loss.",
+    )
+
+    def name(self) -> str:
+        return "Sorensen-Dice"

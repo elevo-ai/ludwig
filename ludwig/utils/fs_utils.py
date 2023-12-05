@@ -358,7 +358,11 @@ def upload_output_file(url):
     if protocol is not None:
         fs = fsspec.filesystem(protocol)
         with tempfile.TemporaryDirectory() as tmpdir:
-            local_fname = os.path.join(tmpdir, "tmpfile")
+            extension = os.path.splitext(url)[1]
+            if extension:
+                local_fname = os.path.join(tmpdir, "tmpfile." + extension)
+            else:
+                local_fname = os.path.join(tmpdir, "tmpfile")
             yield local_fname
             fs.put(local_fname, url, recursive=True)
     else:
