@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 import torch
@@ -16,3 +16,13 @@ except ImportError:
 TorchAudioTuple = Tuple[torch.Tensor, int]
 TorchscriptPreprocessingInput = Union[List[str], List[torch.Tensor], List[TorchAudioTuple], torch.Tensor]
 TorchDevice = Union[str, torch.device]
+
+# Feature Tensors Support Types
+# Type alias for feature tensor dictionary passed to loss functions
+FeatureTensorDict = Dict[str, torch.Tensor]
+
+# Type alias for loss function with optional feature tensors
+LossFunction = Callable[
+    [torch.Tensor, torch.Tensor, Optional[FeatureTensorDict]], 
+    torch.Tensor
+]

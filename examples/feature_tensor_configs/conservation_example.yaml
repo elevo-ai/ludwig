@@ -1,0 +1,65 @@
+# Conservation Law Example Configuration
+# 
+# This example demonstrates how to enforce conservation laws in a chemical 
+# reaction modeling problem. The model learns to predict product concentrations
+# while ensuring mass conservation.
+
+model_type: ecd
+
+input_features:
+  # Input reactant concentrations
+  - name: reactant_a
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  - name: reactant_b
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  # Reaction conditions
+  - name: temperature
+    type: number
+    preprocessing:
+      normalization: minmax
+      
+  - name: pressure
+    type: number
+    preprocessing:
+      normalization: minmax
+      
+  # Catalyst information
+  - name: catalyst_type
+    type: category
+    
+output_features:
+  # Product concentration with conservation constraint
+  - name: product_c
+    type: number
+    loss:
+      type: conservation_loss  # Custom physics-informed loss
+      pass_input_features: true
+      conservation_weight: 100.0
+      conservation_input_features: [reactant_a, reactant_b]
+      conservation_tolerance: 1e-6
+      
+  # Secondary product (optional)
+  - name: product_d
+    type: number
+    loss:
+      type: mean_squared_error
+      pass_input_features: false  # Standard loss for comparison
+      
+trainer:
+  epochs: 50
+  batch_size: 64
+  learning_rate: 0.001
+  optimizer:
+    type: adam
+  early_stop: 10
+  
+preprocessing:
+  split:
+    type: random
+    probabilities: [0.7, 0.1, 0.2]

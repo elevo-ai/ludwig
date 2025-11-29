@@ -73,6 +73,42 @@ class BaseLossConfig(schema_utils.BaseMarshmallowConfig):
 
     weight: float = 1.0
 
+    pass_input_features: bool = schema_utils.Boolean(
+        default=False,
+        description="Whether to pass input features to loss function for physics-informed losses",
+        parameter_metadata={
+            "ui_display_name": "Pass Input Features",
+            "description": "Enable passing input feature tensors to loss functions. "
+                          "This allows physics-informed losses that can access input data "
+                          "to enforce domain constraints and physical laws during training."
+        }
+    )
+
+    input_feature_names: Union[List[str], None] = schema_utils.List(
+        str, 
+        default=None,
+        allow_none=True,
+        description="Specific input features to pass (None = all features). "
+                   "Use this to reduce memory overhead by only passing required features.",
+        parameter_metadata={
+            "ui_display_name": "Input Feature Names",
+            "description": "List of input feature names to pass to the loss function. "
+                          "If not specified, all input features will be passed when "
+                          "pass_input_features is enabled."
+        }
+    )
+
+    detach_feature_tensors: bool = schema_utils.Boolean(
+        default=True,
+        description="Whether to detach feature tensors from computation graph to save memory",
+        parameter_metadata={
+            "ui_display_name": "Detach Feature Tensors", 
+            "description": "If true, feature tensors are detached from the computation graph "
+                          "to reduce memory usage. This prevents gradients from flowing back "
+                          "through input features in the loss function."
+        }
+    )
+
     @classmethod
     def name(cls) -> str:
         return "[undefined]"

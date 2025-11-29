@@ -1,0 +1,95 @@
+# Boundary Conditions Example Configuration
+#
+# This example demonstrates enforcing boundary conditions, commonly used
+# in PDE solving where certain boundary values must be maintained.
+# Use case: Heat transfer simulation with fixed boundary temperatures.
+
+model_type: ecd
+
+input_features:
+  # Spatial coordinates
+  - name: x_position
+    type: number
+    preprocessing:
+      normalization: minmax  # Normalize to [0, 1] for boundary detection
+      
+  - name: y_position
+    type: number
+    preprocessing:
+      normalization: minmax  # Normalize to [0, 1] for boundary detection
+      
+  # Time dimension
+  - name: time
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  # Material properties
+  - name: thermal_conductivity
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  # Initial conditions
+  - name: initial_temperature
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+output_features:
+  # Temperature field with boundary conditions
+  - name: temperature
+    type: number
+    loss:
+      type: boundary_condition_loss  # Custom boundary-enforcing loss
+      pass_input_features: true
+      boundary_weight: 200.0
+      boundary_conditions:
+        x_position:
+          min_value: 0.0      # Left boundary
+          boundary_value: 273.15  # Fixed temperature (0°C)
+        x_position:
+          max_value: 1.0      # Right boundary  
+          boundary_value: 373.15  # Fixed temperature (100°C)
+        y_position:
+          min_value: 0.0      # Bottom boundary
+          boundary_value: 298.15  # Room temperature
+          
+  # Heat flux (no boundary constraints)
+  - name: heat_flux
+    type: number
+    loss:
+      type: mean_squared_error
+      pass_input_features: false
+      
+trainer:
+  epochs: 100
+  batch_size: 128
+  learning_rate: 0.0005
+  optimizer:
+    type: adam
+  validation_field: temperature
+  validation_metric: mean_squared_error
+  early_stop: 15
+  
+preprocessing:
+  split:
+    type: random
+    probabilities: [0.7, 0.15, 0.15]
+    
+hyperopt:
+  goal: minimize
+  output_feature: temperature
+  metric: mean_squared_error
+  split: validation
+  parameters:
+    trainer.learning_rate:
+      space: loguniform
+      lower: 0.0001
+      upper: 0.01
+    trainer.batch_size:
+      space: choice
+      categories: [32, 64, 128, 256]
+  sampler:
+    type: random
+    num_samples: 20

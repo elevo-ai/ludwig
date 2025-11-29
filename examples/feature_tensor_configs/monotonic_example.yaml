@@ -1,0 +1,74 @@
+# Monotonic Relationship Example Configuration
+#
+# This example demonstrates enforcing monotonic relationships between
+# inputs and outputs, useful for problems where physical laws dictate
+# that one variable should increase/decrease monotonically with another.
+
+model_type: ecd
+
+input_features:
+  # Temperature feature (reaction rate should increase monotonically with temperature)
+  - name: temperature
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  # Concentration feature (yield may decrease with high concentrations)
+  - name: substrate_concentration
+    type: number
+    preprocessing:
+      normalization: minmax
+      
+  # Pressure feature
+  - name: pressure
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  # pH level
+  - name: ph_level
+    type: number
+    preprocessing:
+      normalization: minmax
+      
+output_features:
+  # Reaction rate with monotonic temperature relationship
+  - name: reaction_rate
+    type: number
+    loss:
+      type: monotonic_loss  # Custom monotonicity-enforcing loss
+      pass_input_features: true
+      monotonic_weight: 50.0
+      monotonic_features:
+        temperature: increasing  # Rate increases with temperature
+        pressure: increasing     # Rate increases with pressure
+        
+  # Product yield with complex relationships
+  - name: product_yield
+    type: number
+    loss:
+      type: monotonic_loss
+      pass_input_features: true
+      input_feature_names: [substrate_concentration, ph_level]  # Only pass relevant features
+      monotonic_weight: 75.0
+      monotonic_features:
+        ph_level: decreasing  # Yield decreases at extreme pH
+        
+trainer:
+  epochs: 40
+  batch_size: 32
+  learning_rate: 0.002
+  optimizer:
+    type: adam
+    beta1: 0.9
+    beta2: 0.999
+  learning_rate_scheduler:
+    type: exponential_decay
+    decay_rate: 0.96
+    decay_steps: 1000
+    
+preprocessing:
+  split:
+    type: stratify
+    column: reaction_rate
+    probabilities: [0.8, 0.1, 0.1]
