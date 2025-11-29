@@ -1,0 +1,150 @@
+# Multi-Output Mixed Configuration Example
+#
+# This example demonstrates a multi-output model where different outputs
+# use different combinations of feature tensor support, showcasing the
+# flexibility of the feature tensor system.
+
+model_type: ecd
+
+input_features:
+  # Process parameters
+  - name: flow_rate
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  - name: inlet_temperature
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  - name: inlet_pressure
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  # Material properties  
+  - name: material_density
+    type: number
+    preprocessing:
+      normalization: minmax
+      
+  - name: material_viscosity
+    type: number
+    preprocessing:
+      normalization: log_zscore  # Log transform for viscosity
+      
+  # Control variables
+  - name: valve_position
+    type: number
+    preprocessing:
+      normalization: minmax
+      
+  - name: pump_speed
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+  # Environmental conditions
+  - name: ambient_temperature
+    type: number
+    preprocessing:
+      normalization: zscore
+      
+output_features:
+  # Output 1: Outlet temperature with conservation constraints
+  - name: outlet_temperature
+    type: number
+    loss:
+      type: conservation_loss
+      pass_input_features: true
+      conservation_weight: 150.0
+      conservation_input_features: [inlet_temperature, flow_rate]
+      conservation_tolerance: 1e-5
+      
+  # Output 2: Pressure drop with monotonic relationships  
+  - name: pressure_drop
+    type: number
+    loss:
+      type: monotonic_loss
+      pass_input_features: true
+      input_feature_names: [flow_rate, material_viscosity, valve_position]
+      monotonic_weight: 80.0
+      monotonic_features:
+        flow_rate: increasing      # Higher flow = higher pressure drop
+        material_viscosity: increasing  # Higher viscosity = higher pressure drop
+        valve_position: decreasing    # More open valve = lower pressure drop
+        
+  # Output 3: Energy consumption with physical range constraints
+  - name: energy_consumption
+    type: number
+    loss:
+      type: physical_range_loss
+      pass_input_features: true
+      input_feature_names: [pump_speed, flow_rate]
+      range_weight: 100.0
+      absolute_min: 0.0  # Energy consumption cannot be negative
+      context_ranges:
+        pump_speed:
+          feature_min: 0.0
+          feature_max: 100.0
+          output_min: 0.0
+          output_max: 1000.0  # Max reasonable power consumption
+          
+  # Output 4: Standard prediction without physics constraints
+  - name: vibration_level
+    type: number
+    loss:
+      type: mean_squared_error  # Standard loss
+      pass_input_features: false  # No feature tensor support
+      
+  # Output 5: Quality metric with differential equation constraints
+  - name: product_quality
+    type: number
+    loss:
+      type: differential_equation_loss
+      pass_input_features: true
+      input_feature_names: [inlet_temperature, flow_rate]
+      differential_weight: 60.0
+      equation_type: exponential
+      time_feature: flow_rate  # Using flow_rate as pseudo-time
+      rate_feature: inlet_temperature
+      
+combiner:
+  type: concat
+  output_size: 256
+  num_fc_layers: 3
+  fc_layers:
+    - output_size: 512
+      activation: relu
+      dropout: 0.1
+    - output_size: 256  
+      activation: relu
+      dropout: 0.1
+    - output_size: 128
+      activation: relu
+      
+trainer:
+  epochs: 75
+  batch_size: 64
+  learning_rate: 0.001
+  optimizer:
+    type: adam
+    beta1: 0.9
+    beta2: 0.999
+    epsilon: 1e-8
+  learning_rate_scheduler:
+    type: reduce_on_plateau
+    factor: 0.5
+    patience: 5
+    min_lr: 1e-6
+  validation_field: outlet_temperature
+  validation_metric: mean_squared_error
+  early_stop: 12
+  increase_batch_size_on_plateau: 4
+  
+preprocessing:
+  split:
+    type: random
+    probabilities: [0.7, 0.2, 0.1]
+  sample_ratio: 1.0

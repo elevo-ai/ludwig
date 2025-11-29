@@ -217,6 +217,7 @@ class BaseModel(LudwigModule, metaclass=ABCMeta):
         predictions,
         regularization_type: Optional[str] = None,
         regularization_lambda: Optional[float] = None,
+        feature_tensors: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """Computes the training loss for the model.
 
@@ -225,6 +226,7 @@ class BaseModel(LudwigModule, metaclass=ABCMeta):
             predictions: A dictionary of output names to output tensors.
             regularization_type: One of 'l1', 'l2', 'l1_l2', or None.
             regularization_lambda: The regularization lambda.
+            feature_tensors: Optional dictionary of input feature tensors for physics-informed losses.
 
         Returns:
             A tuple of the loss tensor and a dictionary of loss for every
@@ -233,7 +235,12 @@ class BaseModel(LudwigModule, metaclass=ABCMeta):
         train_loss = 0
         of_train_losses = {}
         for of_name, of_obj in self.output_features.items():
-            of_train_loss = of_obj.train_loss(targets[of_name], predictions, of_name)
+            # Extract feature tensors for this output feature if needed
+            output_feature_tensors = self._extract_feature_tensors_for_output(
+                feature_tensors, of_obj, of_name
+            ) if feature_tensors is not None else None
+            
+            of_train_loss = of_obj.train_loss(targets[of_name], predictions, of_name, output_feature_tensors)
             train_loss += of_obj.loss.weight * of_train_loss
             of_train_losses[of_name] = of_train_loss
 
@@ -277,6 +284,41 @@ class BaseModel(LudwigModule, metaclass=ABCMeta):
         eval_loss, additional_losses = self.eval_loss(targets, predictions)
         self.eval_loss_metric.update(eval_loss)
         self.eval_additional_losses_metrics.update(additional_losses)
+
+    def _extract_feature_tensors_for_output(self, feature_tensors, output_feature, output_feature_name):
+        """
+        Extract feature tensors for a specific output feature based on its loss configuration.
+        
+        Args:
+            feature_tensors: Dictionary of all available input feature tensors
+            output_feature: Output feature object
+            output_feature_name: Name of the output feature
+        
+        Returns:
+            Filtered dictionary of feature tensors for this output feature, or None
+        """
+        if feature_tensors is None:
+            return None
+            
+        # Check if this output feature's loss is configured to use input features
+        loss_config = output_feature.loss
+        if not getattr(loss_config, 'pass_input_features', False):
+            return None
+        
+        # Get the list of features to pass (None means all features)
+        selected_features = getattr(loss_config, 'input_feature_names', None)
+        
+        if selected_features is None:
+            # Pass all available features
+            return feature_tensors
+        else:
+            # Pass only selected features
+            filtered_tensors = {}
+            for feature_name in selected_features:
+                if feature_name in feature_tensors:
+                    filtered_tensors[feature_name] = feature_tensors[feature_name]
+                # Note: Missing features are handled gracefully (physics losses can adapt)
+            return filtered_tensors if filtered_tensors else None
 
     @property
     def eval_loss_metric(self) -> LudwigMetric:

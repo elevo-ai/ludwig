@@ -285,10 +285,30 @@ class OutputFeature(BaseFeature, LudwigModule, ABC):
         decoder_params_dict = decoder_schema.dump(decoder_config)
         return decoder_cls(decoder_config=decoder_config, **decoder_params_dict)
 
-    def train_loss(self, targets: Tensor, predictions: Dict[str, Tensor], feature_name):
+    def train_loss(self, targets: Tensor, predictions: Dict[str, Tensor], feature_name, feature_tensors=None):
+        """
+        Compute training loss for this output feature.
+        
+        Args:
+            targets: Target values for this feature
+            predictions: Dictionary of prediction tensors
+            feature_name: Name of this output feature
+            feature_tensors: Optional dictionary of input feature tensors for physics-informed losses
+        
+        Returns:
+            Loss tensor
+        """
         loss_class = type(self.train_loss_function)
         prediction_key = output_feature_utils.get_feature_concat_name(feature_name, loss_class.get_loss_inputs())
-        return self.train_loss_function(predictions[prediction_key], targets)
+        
+        # Check if loss function supports feature tensors
+        loss_fn = self.train_loss_function
+        if hasattr(loss_fn, 'expects_feature_tensors') and feature_tensors is not None:
+            # New loss function with feature tensor support
+            return loss_fn(predictions[prediction_key], targets, feature_tensors=feature_tensors)
+        else:
+            # Backward compatibility: call without feature tensors
+            return loss_fn(predictions[prediction_key], targets)
 
     def eval_loss(self, targets: Tensor, predictions: Dict[str, Tensor]):
         loss_class = type(self.train_loss_function)

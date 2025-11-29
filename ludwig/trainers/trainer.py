@@ -90,6 +90,7 @@ from ludwig.utils.trainer_utils import (
     get_total_steps,
     ProgressTracker,
 )
+from ludwig.utils.loss_utils import extract_feature_tensors
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +290,47 @@ class Trainer(BaseTrainer):
         # NOTE: This is a partially configured LRScheduler. It will be updated in the first call to train_step.
         self.scheduler = LRScheduler(self.config.learning_rate_scheduler, self.optimizer, 0, 0)
 
+    def _extract_feature_tensors_for_loss(self, inputs: Dict[str, torch.Tensor]) -> Optional[Dict[str, torch.Tensor]]:
+        """
+        Extract input feature tensors for physics-informed losses.
+        
+        Args:
+            inputs: Dictionary of input tensors from the batch
+            
+        Returns:
+            Dictionary of feature tensors, or None if no features need to be extracted
+        """
+        # Check if any output features are configured to use input features
+        needs_features = False
+        for of_name, of_obj in self.model.output_features.items():
+            loss_config = of_obj.loss
+            if getattr(loss_config, 'pass_input_features', False):
+                needs_features = True
+                break
+        
+        if not needs_features:
+            return None
+        
+        # Get list of all input feature names from the model
+        input_feature_names = list(self.model.input_features.keys())
+        
+        if not input_feature_names:
+            return None
+        
+        try:
+            # Extract feature tensors using the utility function from Phase 1
+            feature_tensors = extract_feature_tensors(
+                batch=inputs,
+                input_feature_names=input_feature_names,
+                selected_features=None,  # Extract all, filtering happens at output feature level
+                detach=True  # Default: detach to save memory
+            )
+            return feature_tensors if feature_tensors else None
+        except Exception as e:
+            # Log error but don't fail training
+            logger.warning(f"Failed to extract feature tensors for physics-informed loss: {e}")
+            return None
+
     def train_step(
         self,
         inputs: Dict[str, torch.Tensor],
@@ -314,12 +356,15 @@ class Trainer(BaseTrainer):
             # NOTE: AMP is not supported for L-BFGS yet.
             # NOTE: gradient accumulation is not supported for L-BFGS yet.
 
+            # Extract feature tensors for physics-informed losses
+            feature_tensors = self._extract_feature_tensors_for_loss(inputs)
+
             def closure():
                 # Allows L-BFGS to reevaluate the loss function
                 self.distributed.zero_grad(self.optimizer)
                 model_outputs = self.dist_model((inputs, targets))
                 loss, _ = self.model.train_loss(
-                    targets, model_outputs, self.regularization_type, self.regularization_lambda
+                    targets, model_outputs, self.regularization_type, self.regularization_lambda, feature_tensors
                 )
                 loss.backward()
                 return loss
@@ -329,7 +374,7 @@ class Trainer(BaseTrainer):
             # Obtain model predictions and loss
             model_outputs = self.dist_model((inputs, targets))
             loss, all_losses = self.model.train_loss(
-                targets, model_outputs, self.regularization_type, self.regularization_lambda
+                targets, model_outputs, self.regularization_type, self.regularization_lambda, feature_tensors
             )
 
             if not self.evaluate_training_set:
@@ -340,12 +385,15 @@ class Trainer(BaseTrainer):
 
             return loss, all_losses, model_outputs[USED_TOKENS]
 
+        # Extract feature tensors for physics-informed losses (outside AMP context for efficiency)
+        feature_tensors = self._extract_feature_tensors_for_loss(inputs)
+        
         with torch.cuda.amp.autocast() if self.use_amp else contextlib.nullcontext():
             with self.distributed.prepare_model_update(self.dist_model, should_step=should_step):
                 # Obtain model predictions and loss
                 model_outputs = self.dist_model((inputs, targets))
                 loss, all_losses = self.model.train_loss(
-                    targets, model_outputs, self.regularization_type, self.regularization_lambda
+                    targets, model_outputs, self.regularization_type, self.regularization_lambda, feature_tensors
                 )
                 loss = loss / self.gradient_accumulation_steps
 
